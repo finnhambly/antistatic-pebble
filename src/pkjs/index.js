@@ -1,13 +1,25 @@
-// Phone side: reads Antistatic's public API, boils each market down to what
-// the watch draws, and sends it over in small binary messages.
+// Phone side: reads Antistatic's API (signed in, when the watch is), boils
+// each market down to what the watch draws, and sends it over in small
+// binary messages.
 
-var API = 'https://antistatic.exchange/api/v1';
-var MAX_MARKETS = 24;
+var config = require('./config');
+var auth = require('./auth');
+var settings = require('./settings');
+
+var API = config.base + '/api/v1';
+var MAX_MARKETS = 24; // aplite holds 4: see maxMarkets
 var MAX_GROUPS = 6;
-var CHUNK = 100; // bars per detail message (9 bytes each)
+var CHUNK = 80; // bars per detail message (11 bytes each); 40 on aplite's smaller inbox
 var CACHE_KEY = 'antistatic.models.v1';
+var CHOICES_KEY = 'antistatic.choices.v1'; // what settings offers: {at, markets}
+var PICKS_KEY = 'antistatic.picks.v1'; // [{code, title, private}], or none for the time-sensitive order
 
-var MSG = { SUMMARY: 1, LIST_DONE: 2, DETAIL: 3, DETAIL_DONE: 4, STATUS: 5, HELLO: 10, REQUEST_DETAIL: 11, REFRESH: 12 };
+var MSG = {
+  SUMMARY: 1, LIST_DONE: 2, DETAIL: 3, DETAIL_DONE: 4, STATUS: 5, AUTH: 6,
+  HELLO: 10, REQUEST_DETAIL: 11, REFRESH: 12, SIGN_IN: 13, SIGN_OUT: 14,
+};
+var MF = { RESOLVED: 1, CUMULATIVE: 2, PRIVATE: 4, MINE: 8 };
+var NONE = 0xffff; // no forecast of yours on this bar
 var CADENCE = { day: 0, week: 1, month: 2, quarter: 3, year: 4 };
 var DAY_MS = 86400000;
 var EPOCH_2000 = Date.UTC(2000, 0, 1);
@@ -16,6 +28,7 @@ var Q_NONE = -2147483648;
 var models = [];      // in display order
 var byCode = {};
 var fetching = false;
+var refetch = false;  // a fetch was asked for while one ran
 var pendingDetail = null; // asked for before the first fetch finished
 
 // --- Messaging -------------------------------------------------------------
@@ -50,19 +63,29 @@ function status(text) {
 
 // --- HTTP ------------------------------------------------------------------
 
-function get(path, cb) {
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', API + path, true);
-  xhr.setRequestHeader('Accept', 'application/json');
-  xhr.onload = function () {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      try { cb(null, JSON.parse(xhr.responseText)); } catch (e) { cb(e); }
-    } else {
-      cb(new Error('HTTP ' + xhr.status));
-    }
-  };
-  xhr.onerror = function () { cb(new Error('Network')); };
-  xhr.send();
+// GET from the API, as the signed-in user when there is one. A refused
+// token is refreshed once and the request tried again.
+function get(path, cb, retried) {
+  auth.token(function (token) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', API + path, true);
+    xhr.setRequestHeader('Accept', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+    xhr.onload = function () {
+      if (xhr.status === 401 && token && !retried) {
+        return auth.refresh(function () { get(path, cb, true); });
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { cb(null, JSON.parse(xhr.responseText)); } catch (e) { cb(e); }
+      } else {
+        cb(new Error('HTTP ' + xhr.status));
+      }
+    };
+    // A request that never answers would hold up every fetch after it.
+    xhr.timeout = 30000;
+    xhr.onerror = xhr.ontimeout = function () { cb(new Error('Network')); };
+    xhr.send();
+  });
 }
 
 // Run fn over items, a few at a time.
@@ -176,6 +199,7 @@ function buildModel(market, forecast, subs) {
   // Curves in the order the API lists them.
   var order = (forecast.curves || []).map(function (c) { return c.curve; });
   var groups = {};
+  var hasMine = false;
   (forecast.submarkets || []).forEach(function (s) {
     var key = s.curve || s.projection_group || 'main';
     if (!groups[key]) {
@@ -189,7 +213,9 @@ function buildModel(market, forecast, subs) {
     if (s.resolved_yes) flags |= 2;
     if (s.status === 'ended' || s.status === 'closed') flags |= 4;
     var house = s.chart_starting_probability !== undefined ? s.chart_starting_probability : s.starting_probability;
-    groups[key].points.push({ x: x, crowd: permille(s.community_probability), house: permille(house), flags: flags });
+    var mine = typeof s.my_probability === 'number' ? permille(s.my_probability) : NONE;
+    if (mine !== NONE) hasMine = true;
+    groups[key].points.push({ x: x, crowd: permille(s.community_probability), house: permille(house), mine: mine, flags: flags });
   });
 
   var eventLabels = {};
@@ -210,7 +236,8 @@ function buildModel(market, forecast, subs) {
     code: market.code,
     title: market.title,
     kind: kind,
-    flags: (market.status === 'resolved' ? 1 : 0) | (market.cumulative ? 2 : 0),
+    flags: (market.status === 'resolved' ? MF.RESOLVED : 0) | (market.cumulative ? MF.CUMULATIVE : 0) |
+      (market.visibility && market.visibility !== 'public' ? MF.PRIVATE : 0) | (hasMine ? MF.MINE : 0),
     cadence: count ? 0 : cadenceOf(market),
     unit: count ? splitUnit(market.x_unit) : ['', '', ''],
     groups: list,
@@ -266,7 +293,7 @@ function i32(out, v) {
 function u16(out, v) { out.push(v & 255, (v >> 8) & 255); }
 
 function sendSummaries(statusText) {
-  var total = Math.min(models.length, MAX_MARKETS);
+  var total = Math.min(models.length, maxMarkets());
   for (var i = 0; i < total; i++) {
     var m = models[i];
     var data = [];
@@ -289,10 +316,12 @@ function sendSummaries(statusText) {
 
 function sendDetail(m) {
   m.groups.forEach(function (g, gi) {
-    for (var off = 0; off < g.points.length; off += CHUNK) {
+    var chunk = maxMarkets() < MAX_MARKETS ? 40 : CHUNK;
+    for (var off = 0; off < g.points.length; off += chunk) {
       var data = [];
-      g.points.slice(off, off + CHUNK).forEach(function (p) {
-        i32(data, p.x); u16(data, p.crowd); u16(data, p.house); data.push(p.flags);
+      g.points.slice(off, off + chunk).forEach(function (p) {
+        i32(data, p.x); u16(data, p.crowd); u16(data, p.house); u16(data, p.mine === undefined ? NONE : p.mine);
+        data.push(p.flags);
       });
       send({ Type: MSG.DETAIL, Code: m.code, Group: gi, Offset: off, GroupTotal: g.points.length, Data: data });
     }
@@ -319,17 +348,49 @@ function saveCache() {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(models)); } catch (e) { /* too big: skip */ }
 }
 
+function maxMarkets() {
+  var info = Pebble.getActiveWatchInfo && Pebble.getActiveWatchInfo();
+  return info && info.platform === 'aplite' ? 4 : MAX_MARKETS;
+}
+
+function loadPicks() {
+  try { return JSON.parse(localStorage.getItem(PICKS_KEY) || 'null'); } catch (e) { return null; }
+}
+
+function savePicks(picks) {
+  if (picks) localStorage.setItem(PICKS_KEY, JSON.stringify(picks));
+  else localStorage.removeItem(PICKS_KEY);
+}
+
+// The markets to show, in order: the ones picked in settings, or the
+// homepage's time-sensitive order.
+function listMarkets(cb) {
+  var picks = loadPicks();
+  if (!picks) {
+    return get('/markets?sort=time&limit=' + maxMarkets(), function (err, res) { cb(err, err ? [] : res.data || []); });
+  }
+  var out = [], failed = 0;
+  eachLimit(picks.slice(0, maxMarkets()), 3, function (pick, i, next) {
+    get('/markets/' + encodeURIComponent(pick.code), function (err, res) {
+      if (err) failed++; else out[i] = res.data;
+      next();
+    });
+  }, function () {
+    var markets = out.filter(Boolean);
+    cb(picks.length && !markets.length && failed ? new Error('Network') : null, markets);
+  });
+}
+
 function fetchAll() {
-  if (fetching) return;
+  if (fetching) { refetch = true; return; }
   fetching = true;
-  get('/markets?limit=' + MAX_MARKETS, function (err, res) {
+  listMarkets(function (err, markets) {
     if (err) {
       fetching = false;
       if (models.length) sendSummaries('Offline');
       else status('No signal');
       return;
     }
-    var markets = (res.data || []).slice(0, MAX_MARKETS);
     var built = [];
     eachLimit(markets, 3, function (market, i, next) {
       var code = encodeURIComponent(market.code);
@@ -345,17 +406,36 @@ function fetchAll() {
       });
     }, function () {
       fetching = false;
+      if (refetch) { refetch = false; return fetchAll(); }
       setModels(built.filter(function (m) { return m && m.groups.length; }));
       saveCache();
       sendSummaries('Live');
       if (pendingDetail && byCode[pendingDetail]) sendDetail(byCode[pendingDetail]);
       pendingDetail = null;
+      fetchChoices(false);
     });
   });
 }
 
+// --- Account ---------------------------------------------------------------
+
+function sendAuth(state) {
+  send({ Type: MSG.AUTH, Status: String(state.state), Code: state.code || '', Title: state.uri || state.name || '' });
+}
+
+function signedIn() {
+  // What was cached was fetched as someone else (or no one).
+  setModels([]);
+  saveCache();
+  localStorage.removeItem(CHOICES_KEY);
+  fetchAll();
+}
+
+auth.onChange(sendAuth);
+
 Pebble.addEventListener('ready', function () {
   loadCache();
+  sendAuth(auth.current());
   // The watch's hello usually goes out before this side is up, so start here.
   if (models.length) sendSummaries('Cached');
   fetchAll();
@@ -364,16 +444,91 @@ Pebble.addEventListener('ready', function () {
 Pebble.addEventListener('appmessage', function (e) {
   var p = e.payload || {};
   if (p.Type === MSG.HELLO) {
+    sendAuth(auth.current());
     if (models.length) sendSummaries('Cached');
     fetchAll();
   } else if (p.Type === MSG.REFRESH) {
     fetchAll();
   } else if (p.Type === MSG.REQUEST_DETAIL) {
+    // Bars still queued for a market the watch has moved off are dropped.
+    queue = queue.filter(function (item, i) {
+      var t = item.msg.Type;
+      return (sending && i === 0) || (t !== MSG.DETAIL && t !== MSG.DETAIL_DONE) || item.msg.Code === p.Code;
+    });
     var m = byCode[p.Code];
     if (m) sendDetail(m);
     else if (fetching) pendingDetail = p.Code;
     else status('Not found');
+  } else if (p.Type === MSG.SIGN_IN) {
+    auth.startSignIn(signedIn);
+  } else if (p.Type === MSG.SIGN_OUT) {
+    signOut();
   }
+});
+
+function signOut() {
+  auth.signOut();
+  setModels([]);
+  saveCache();
+  localStorage.removeItem(CHOICES_KEY);
+  fetchAll();
+}
+
+function brief(m) {
+  return { code: m.code, title: m.title, private: !!(m.visibility && m.visibility !== 'public') };
+}
+
+function loadChoices() {
+  try { return JSON.parse(localStorage.getItem(CHOICES_KEY) || 'null'); } catch (e) { return null; }
+}
+
+// The markets settings offers (most time-sensitive first), kept so the page
+// opens at once. Fetched again after an hour, or when you sign in or out.
+function fetchChoices(force, cb) {
+  var kept = loadChoices();
+  if (!force && kept && Date.now() - kept.at < 3600000) return cb && cb(kept.markets);
+  // Up to 300, a page of 100 at a time.
+  var markets = [];
+  (function page(offset) {
+    get('/markets?sort=time&limit=100&offset=' + offset, function (err, res) {
+      if (err && !markets.length) return cb && cb(kept ? kept.markets : null);
+      if (!err) markets = markets.concat((res.data || []).map(brief));
+      if (!err && res.paging && res.paging.has_more && offset < 200) return page(offset + 100);
+      try { localStorage.setItem(CHOICES_KEY, JSON.stringify({ at: Date.now(), markets: markets })); } catch (e) { /* full */ }
+      if (cb) cb(markets);
+    });
+  })(0);
+}
+
+function openSettings(markets) {
+  var cur = auth.current();
+  Pebble.openURL(settings.url({
+    auth: { signedIn: cur.state === auth.STATE.IN, name: cur.name || '' },
+    max: maxMarkets(),
+    picks: loadPicks(),
+    markets: markets || models.map(function (m) { return { code: m.code, title: m.title, private: !!(m.flags & MF.PRIVATE) }; }),
+  }));
+}
+
+// Settings in the phone's Pebble app: the account, and which markets show in
+// what order.
+Pebble.addEventListener('showConfiguration', function () {
+  var kept = loadChoices();
+  if (kept) return openSettings(kept.markets);
+  fetchChoices(true, openSettings);
+});
+
+Pebble.addEventListener('webviewclosed', function (e) {
+  var out = settings.parse(e && e.response);
+  if (!out) return;
+  var before = JSON.stringify(loadPicks());
+  savePicks(out.markets && out.markets.map(function (m) { return { code: m.code, title: m.title, private: !!m.private }; }));
+  if (out.action === 'signout') return signOut();
+  if (out.action === 'signin') {
+    // Straight on to the approval page, the code already filled in.
+    auth.startSignIn(signedIn, function (complete) { setTimeout(function () { Pebble.openURL(complete); }, 300); });
+  }
+  if (JSON.stringify(loadPicks()) !== before) fetchAll();
 });
 
 if (typeof module !== 'undefined') {

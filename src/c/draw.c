@@ -103,6 +103,10 @@ int segments_width(int h, const char *digits, int cells) {
 // A vacuum-fluorescent readout: unlit segments stay faintly visible, and
 // spare leading cells show a ghost 8.
 void draw_segments(GContext *ctx, GRect box, const char *digits, int cells, bool right_align) {
+  draw_segments_color(ctx, box, digits, cells, right_align, C_LIT);
+}
+
+void draw_segments_color(GContext *ctx, GRect box, const char *digits, int cells, bool right_align, GColor color) {
   int h = box.size.h, dw, gap, t;
   seg_metrics(h, &dw, &gap, &t);
   int n = 0;
@@ -122,14 +126,14 @@ void draw_segments(GContext *ctx, GRect box, const char *digits, int cells, bool
   }
   for (const char *p = digits; *p; p++) {
     if (*p == '.') {
-      graphics_context_set_fill_color(ctx, C_LIT);
+      graphics_context_set_fill_color(ctx, color);
       graphics_fill_rect(ctx, GRect(x, box.origin.y + h - t, t, t), 0, GCornerNone);
       x += t + gap;
       continue;
     }
     uint8_t mask = seg_mask(*p);
     seg_rects(GRect(x, box.origin.y, dw, h), t, r);
-    graphics_context_set_fill_color(ctx, C_LIT);
+    graphics_context_set_fill_color(ctx, color);
     for (int s = 0; s < 7; s++) {
       if (mask & (1 << s)) graphics_fill_rect(ctx, r[s], 0, GCornerNone);
     }
@@ -147,19 +151,16 @@ void draw_geq(GContext *ctx, GPoint at, int size, GColor color) {
   graphics_draw_line(ctx, GPoint(at.x, at.y + size + 3), GPoint(at.x + size, at.y + size + 3));
 }
 
-// The tuner's status column: which line is shown, and whether the bar under
-// the needle has settled.
-void draw_indicators(GContext *ctx, GRect r, bool house, bool settled, bool settled_yes) {
+// The tuner's status column: which line is shown. Black and white draws
+// only the lit one.
+void draw_indicators(GContext *ctx, GRect r, int line) {
   int lh = r.size.h / 3;
   GFont f = fonts_get_system_font(FONT_KEY_GOTHIC_14);
   GColor off = PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack);
-#if !defined(PBL_COLOR)
-  // Black and white: unlit labels are not drawn at all.
-#endif
-  draw_text(ctx, "Crowd", f, GRect(r.origin.x, r.origin.y - 3, r.size.w, lh + 4), GTextAlignmentRight, house ? off : C_LIT);
-  draw_text(ctx, "House", f, GRect(r.origin.x, r.origin.y + lh - 3, r.size.w, lh + 4), GTextAlignmentRight, house ? C_LIT : off);
-  draw_text(ctx, settled_yes ? "Yes" : "Settled", f, GRect(r.origin.x, r.origin.y + 2 * lh - 3, r.size.w, lh + 4),
-            GTextAlignmentRight, settled ? C_RED : off);
+  for (int i = 0; i < 3; i++) {
+    draw_text(ctx, line_name(i), f, GRect(r.origin.x, r.origin.y + i * lh - 3, r.size.w, lh + 4), GTextAlignmentRight,
+              line == i ? C_LIT : off);
+  }
 }
 
 // "antistatic." with the red full stop, a counter or status on the right.
@@ -271,7 +272,7 @@ void fmt_by_date(char *buf, size_t n, int32_t day, int cadence) {
 // The big tuner line: a small prefix ("By", ≥), segment digits, a unit in
 // the MHz slot, and the status column on the right.
 void draw_readout(GContext *ctx, GRect r, const char *prefix, bool geq, const char *digits, int cells,
-                  const char *unit, bool house, bool settled, bool settled_yes) {
+                  const char *unit, int line, bool settled) {
   int iw = g_theme.big ? 54 : 40;
   int pw = (prefix && prefix[0]) || geq ? (g_theme.big ? 24 : 18) : 0;
   GFont uf = g_theme.small_bold;
@@ -286,7 +287,8 @@ void draw_readout(GContext *ctx, GRect r, const char *prefix, bool geq, const ch
   int sw = segments_width(h, digits, cells);
   int base = r.origin.y + r.size.h;
   GRect box = GRect(r.origin.x + pw, base - h, sw, h);
-  draw_segments(ctx, box, digits, cells, false);
+  // Settled bars read in red.
+  draw_segments_color(ctx, box, digits, cells, false, settled ? C_RED : C_LIT);
 
   if (geq) draw_geq(ctx, GPoint(r.origin.x + 2, base - 13), 7, C_DIM);
   else if (pw) draw_text(ctx, prefix, g_theme.small, GRect(r.origin.x, base - g_theme.lh - 1, pw + 4, g_theme.lh + 4), GTextAlignmentLeft, C_DIM);
@@ -294,7 +296,7 @@ void draw_readout(GContext *ctx, GRect r, const char *prefix, bool geq, const ch
     int fh = g_theme.big ? 22 : 18;
     draw_text(ctx, unit, uf, GRect(box.origin.x + sw + 4, base - fh, uw + 4, fh + 2), GTextAlignmentLeft, C_LIT);
   }
-  draw_indicators(ctx, GRect(r.origin.x + r.size.w - iw, r.origin.y, iw, r.size.h), house, settled, settled_yes);
+  draw_indicators(ctx, GRect(r.origin.x + r.size.w - iw, r.origin.y, iw, r.size.h), line);
 }
 
 // Rows of bars, as on the homepage. Short labels sit to the left of each

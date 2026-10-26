@@ -6,6 +6,8 @@ int g_market_total = 0;
 bool g_list_done = false;
 char g_status[48] = "Tuning";
 Detail g_detail;
+int g_line = LINE_CROWD;
+Auth g_auth;
 
 static char s_pending_detail[CODE_LEN];
 
@@ -110,16 +112,17 @@ static void on_detail(DictionaryIterator *it) {
     g_detail.npts += g_detail.count[g];
     if (g + 1 > g_detail.ngroups) g_detail.ngroups = g + 1;
   }
-  int n = data->length / 9;
+  int n = data->length / 11;
   for (int i = 0; i < n; i++) {
     int k = offset + i;
     if (k >= g_detail.count[g]) break;
-    const uint8_t *p = data->value->data + i * 9;
+    const uint8_t *p = data->value->data + i * 11;
     Point *pt = &g_detail.pts[g_detail.start[g] + k];
     pt->x = rd_i32(p);
     pt->crowd = rd_u16(p + 4);
     pt->house = rd_u16(p + 6);
-    pt->flags = p[8];
+    pt->mine = rd_u16(p + 8);
+    pt->flags = p[10];
   }
 }
 
@@ -140,6 +143,23 @@ static void inbox(DictionaryIterator *it, void *ctx) {
       if (strcmp(code, g_detail.code) == 0) g_detail.ready = true;
       market_window_refresh();
       detail_window_refresh();
+      break;
+    }
+    case MSG_AUTH: {
+      int before = g_auth.state;
+      Tuple *st = dict_find(it, MESSAGE_KEY_Status);
+      const char *sv = st ? st->value->cstring : "";
+      g_auth.state = sv[0] ? sv[0] - '0' : AUTH_OUT;
+      copy_str(g_auth.code, sizeof(g_auth.code), dict_find(it, MESSAGE_KEY_Code));
+      copy_str(g_auth.text, sizeof(g_auth.text), dict_find(it, MESSAGE_KEY_Title));
+      if (g_auth.state != AUTH_IN && g_line == LINE_YOU) g_line = LINE_CROWD;
+      account_window_refresh();
+      if (before == AUTH_CODE && g_auth.state == AUTH_IN) {
+        // Signed in: the list is fetched again as you.
+        snprintf(g_status, sizeof(g_status), "Tuning");
+        g_list_done = false;
+        list_window_refresh();
+      }
       break;
     }
     case MSG_STATUS:
@@ -194,6 +214,43 @@ void comm_refresh(void) {
   send_type(MSG_REFRESH, NULL);
 }
 
+void comm_sign_in(void) { send_type(MSG_SIGN_IN, NULL); }
+void comm_sign_out(void) { send_type(MSG_SIGN_OUT, NULL); }
+
+// The first few markets are kept on the watch, so the list draws at once
+// on launch while the phone fetches.
+#define KEEP_MARKETS 3
+enum { P_LAYOUT = 1, P_COUNT = 2, P_MARKETS = 10 };
+
+static void keep_markets(void) {
+  if (!g_list_done || g_market_count == 0) return;
+  int n = g_market_count < KEEP_MARKETS ? g_market_count : KEEP_MARKETS;
+  persist_write_int(P_LAYOUT, sizeof(Summary));
+  persist_write_int(P_COUNT, n);
+  for (int i = 0; i < n; i++) {
+    const uint8_t *p = (const uint8_t *)&g_markets[i];
+    for (int off = 0, part = 0; off < (int)sizeof(Summary); off += PERSIST_DATA_MAX_LENGTH, part++) {
+      int len = sizeof(Summary) - off < PERSIST_DATA_MAX_LENGTH ? sizeof(Summary) - off : PERSIST_DATA_MAX_LENGTH;
+      persist_write_data(P_MARKETS + i * 4 + part, p + off, len);
+    }
+  }
+}
+
+static void restore_markets(void) {
+  if (persist_read_int(P_LAYOUT) != (int)sizeof(Summary)) return;
+  int n = persist_read_int(P_COUNT);
+  if (n < 1 || n > KEEP_MARKETS || n > MAX_MARKETS) return;
+  for (int i = 0; i < n; i++) {
+    uint8_t *p = (uint8_t *)&g_markets[i];
+    for (int off = 0, part = 0; off < (int)sizeof(Summary); off += PERSIST_DATA_MAX_LENGTH, part++) {
+      int len = sizeof(Summary) - off < PERSIST_DATA_MAX_LENGTH ? sizeof(Summary) - off : PERSIST_DATA_MAX_LENGTH;
+      if (persist_read_data(P_MARKETS + i * 4 + part, p + off, len) != len) return;
+    }
+  }
+  g_market_count = g_market_total = n;
+  snprintf(g_status, sizeof(g_status), "Tuning");
+}
+
 static void on_tap(AccelAxisType axis, int32_t direction) {
   comm_refresh();
 }
@@ -227,8 +284,9 @@ int main(void) {
   app_message_register_outbox_failed(outbox_failed);
   uint32_t in_size = app_message_inbox_size_maximum();
   if (in_size > INBOX_SIZE) in_size = INBOX_SIZE;
-  app_message_open(in_size, 128);
+  app_message_open(in_size, 64);
 
+  restore_markets();
   list_window_push();
   accel_tap_service_subscribe(on_tap);
   send_type(MSG_HELLO, NULL);
@@ -236,6 +294,7 @@ int main(void) {
   app_event_loop();
 
   accel_tap_service_unsubscribe();
+  keep_markets();
 #if PBL_API_EXISTS(app_glance_reload)
   app_glance_reload(glance, NULL);
 #endif

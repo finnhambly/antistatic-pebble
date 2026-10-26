@@ -40,6 +40,24 @@ int point_at(int g, int32_t x, bool count, const Point **out) {
   return found;
 }
 
+// A bar's value on a line. Where you have no forecast, yours is the house's.
+int line_value(const Point *p, int line) {
+  if (!p) return -1;
+  if (line == LINE_YOU && p->mine != MINE_NONE) return p->mine;
+  return line == LINE_CROWD ? p->crowd : p->house;
+}
+
+const char *line_name(int line) { return line == LINE_CROWD ? "Crowd" : line == LINE_HOUSE ? "House" : "You"; }
+
+// The line shown beside the main one.
+int other_line(int line) { return line == LINE_CROWD ? LINE_HOUSE : LINE_CROWD; }
+
+// Crowd, house, then yours where you have a forecast on the market.
+void next_line(const Summary *m) {
+  g_line = (g_line + 1) % 3;
+  if (g_line == LINE_YOU && !(m->flags & MF_MINE)) g_line = LINE_CROWD;
+}
+
 // A short tick in the wrist when the needle takes a line across even odds.
 void bump_detent(int before, int after) {
   if (before < 0 || after < 0) return;

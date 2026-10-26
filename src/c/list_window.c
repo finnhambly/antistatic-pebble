@@ -3,6 +3,19 @@
 static Window *s_window;
 static Layer *s_layer;
 static int s_index;
+static AppTimer *s_prefetch;
+
+// Fetch the shown market's curves while it's read, so tuning in is
+// instant. Waits a moment so scrolling past doesn't fetch every market.
+static void prefetch(void *ctx) {
+  s_prefetch = NULL;
+  if (s_index < g_market_count && g_list_done) comm_request_detail(g_markets[s_index].code);
+}
+
+static void schedule_prefetch(void) {
+  if (s_prefetch) app_timer_reschedule(s_prefetch, 400);
+  else s_prefetch = app_timer_register(400, prefetch, NULL);
+}
 
 static int scale_x(int32_t v, int32_t lo, int32_t hi, GRect bar) {
   if (hi <= lo) return bar.origin.x;
@@ -86,8 +99,9 @@ static void update(Layer *layer, GContext *ctx) {
   int y = c.origin.y + g_theme.lh;
   int bottom = c.origin.y + c.size.h;
   bool resolved = m->flags & MF_RESOLVED;
+  bool priv = m->flags & MF_PRIVATE;
   bool single = m->kind != KIND_COUNT && m->ngroups == 1 && m->groups[0].label[0] == 0;
-  if (resolved || single) bottom -= g_theme.lh;
+  if (resolved || single || priv) bottom -= g_theme.lh;
   bottom -= g_theme.edge;
   int ng = m->ngroups > 0 ? m->ngroups : 1;
   RowLayout L;
@@ -124,6 +138,15 @@ static void update(Layer *layer, GContext *ctx) {
     y += L.rh;
   }
 
+  // The foot line: the single event's 50% date, or that it's settled; and
+  // whether the market is private.
+  GRect foot = GRect(c.origin.x, bottom - 1, c.size.w, 18);
+  if (priv) {
+    draw_text(ctx, "Private", g_theme.small_bold, foot, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight), C_RED);
+#if defined(PBL_ROUND)
+    foot.origin.y -= g_theme.lh;
+#endif
+  }
   if (single && !resolved) {
     char text[40], date[20];
     if (m->groups[0].q[2] != Q_NONE) {
@@ -133,10 +156,10 @@ static void update(Layer *layer, GContext *ctx) {
       fmt_date(date, sizeof(date), m->hi, m->cadence);
       snprintf(text, sizeof(text), "Under 50%% by %s", date);
     }
-    draw_text(ctx, text, g_theme.small, GRect(c.origin.x, bottom - 1, c.size.w, 18), align, C_DIM);
+    draw_text(ctx, text, g_theme.small, foot, align, C_DIM);
   }
   if (resolved) {
-    draw_text(ctx, "Resolved", g_theme.small_bold, GRect(c.origin.x, bottom - 1, c.size.w, 18), align, C_RED);
+    draw_text(ctx, "Resolved", g_theme.small_bold, foot, align, C_RED);
   }
 }
 
@@ -145,6 +168,7 @@ static void step(int d) {
   int next = s_index + d;
   if (next < 0 || next >= g_market_count) return;
   s_index = next;
+  schedule_prefetch();
   layer_mark_dirty(s_layer);
 }
 
@@ -153,7 +177,7 @@ static void down(ClickRecognizerRef r, void *ctx) { step(1); }
 static void select(ClickRecognizerRef r, void *ctx) {
   if (g_market_count > 0) market_window_push(s_index);
 }
-static void select_long(ClickRecognizerRef r, void *ctx) { comm_refresh(); }
+static void select_long(ClickRecognizerRef r, void *ctx) { account_window_push(); }
 
 static void clicks(void *ctx) {
   window_single_repeating_click_subscribe(BUTTON_ID_UP, 150, up);
@@ -182,4 +206,5 @@ void list_window_push(void) {
 
 void list_window_refresh(void) {
   if (s_layer) layer_mark_dirty(s_layer);
+  if (g_list_done) schedule_prefetch();
 }

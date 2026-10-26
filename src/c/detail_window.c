@@ -1,17 +1,17 @@
 #include "app.h"
 
-// Level 3: one curve as a point chart, every bar with its house tick.
+// Level 3: one curve as a point chart, every bar with a tick for the other
+// line.
 // Up and Down step bar by bar; Select moves to the next curve.
 
 static Window *s_window;
 static Layer *s_layer;
 static int s_market, s_group, s_idx;
-static bool s_house;
 
 static const Summary *market(void) { return &g_markets[s_market]; }
 
-static int shown(const Point *p) { return s_house ? p->house : p->crowd; }
-static int other(const Point *p) { return s_house ? p->crowd : p->house; }
+static int shown(const Point *p) { return line_value(p, g_line); }
+static int other(const Point *p) { return line_value(p, other_line(g_line)); }
 
 static void bar_label(char *buf, size_t n, const Point *p) {
   const Summary *m = market();
@@ -50,14 +50,14 @@ static void update(Layer *layer, GContext *ctx) {
   fmt_prob(digits, sizeof(digits), shown(p), false);
   bool res = p->flags & PF_RESOLVED;
   int rh = g_theme.big ? 44 : 32;
-  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh), NULL, false, digits, 0, "%", s_house, res, res && (p->flags & PF_YES));
+  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh), NULL, false, digits, 0, "%", g_line, res);
   y += rh + 2;
 
   // What the bar is, and the other line.
   char label[28], second[24], ov[10];
   bar_label(label, sizeof(label), p);
   fmt_prob(ov, sizeof(ov), other(p), true);
-  snprintf(second, sizeof(second), "%s %s", s_house ? "Crowd" : "House", ov);
+  snprintf(second, sizeof(second), "%s %s", line_name(other_line(g_line)), ov);
   int lh = g_theme.big ? 22 : 18;
   if (count) {
     draw_geq(ctx, GPoint(c.origin.x + 1, y + 4), 6, C_TEXT);
@@ -162,7 +162,7 @@ static void select(ClickRecognizerRef r, void *ctx) {
   layer_mark_dirty(s_layer);
 }
 static void select_long(ClickRecognizerRef r, void *ctx) {
-  s_house = !s_house;
+  next_line(market());
   layer_mark_dirty(s_layer);
 }
 
@@ -187,10 +187,9 @@ static void unload(Window *w) {
   s_window = NULL;
 }
 
-void detail_window_push(int market_index, int group, int32_t x, bool house) {
+void detail_window_push(int market_index, int group, int32_t x) {
   s_market = market_index;
   s_group = group;
-  s_house = house;
   seek(x);
   s_window = window_create();
   window_set_background_color(s_window, C_BG);

@@ -7,7 +7,6 @@ static Window *s_window;
 static Layer *s_layer;
 static int s_market;
 static int s_li = -1;  // ladder index of the needle
-static bool s_house;
 
 static const Summary *market(void) { return &g_markets[s_market]; }
 
@@ -39,7 +38,7 @@ static int32_t cursor_x(void) {
   return pts[s_li < n ? s_li : n - 1].x;
 }
 
-static int value_of(const Point *p) { return p ? (s_house ? p->house : p->crowd) : -1; }
+static int value_of(const Point *p) { return line_value(p, g_line); }
 
 static int scale_pos(int32_t v, int32_t lo, int32_t hi, int x0, int w) {
   if (hi <= lo) return x0;
@@ -51,7 +50,7 @@ static void draw_tuning(GContext *ctx, GRect c, int y) {
   // Before the bars arrive: the summary rows would mislead under a needle,
   // so the readout waits, unlit.
   int h = g_theme.big ? 40 : 30;
-  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, h), NULL, false, "", 4, NULL, s_house, false, false);
+  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, h), NULL, false, "", 4, NULL, g_line, false);
   draw_text(ctx, "Tuning", g_theme.small_bold, GRect(c.origin.x, y + h + 10, c.size.w, 20), GTextAlignmentCenter, C_DIM);
 }
 
@@ -78,10 +77,12 @@ static void update(Layer *layer, GContext *ctx) {
 
   // Readout.
   char digits[16], unit[20], prefix[8] = "";
-  bool settled = false, yes = false;
+  bool settled = false;
   if (count) {
     fmt_value(digits, sizeof(digits), x, m, false);
-    snprintf(unit, sizeof(unit), "%s%s", m->prefix, m->suffix[0] || m->prefix[0] ? m->suffix : m->word);
+    // A long word unit ("hurricanes") would crowd out the digits; the title says it.
+    const char *word = strlen(m->word) <= 5 ? m->word : "";
+    snprintf(unit, sizeof(unit), "%s%s", m->prefix, m->suffix[0] || m->prefix[0] ? m->suffix : word);
   } else {
     snprintf(digits, sizeof(digits), "%d", date_year(x));
     static const char *MON[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -94,10 +95,10 @@ static void update(Layer *layer, GContext *ctx) {
   for (int g = 0; g < g_detail.ngroups; g++) {
     const Point *p;
     point_at(g, x, count, &p);
-    if (p && (p->flags & PF_RESOLVED)) { settled = true; if (p->flags & PF_YES) yes = true; }
+    if (p && (p->flags & PF_RESOLVED)) settled = true;
   }
   int rh_read = g_theme.big ? 40 : 30;
-  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count, digits, count ? 0 : 4, unit, s_house, settled, yes);
+  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count, digits, count ? 0 : 4, unit, g_line, settled);
   y += rh_read + 6;
 
   // Rows and the dial share one x range so the needle runs straight down.
@@ -186,10 +187,10 @@ static void move(int d) {
 static void up(ClickRecognizerRef r, void *ctx) { move(-1); }
 static void down(ClickRecognizerRef r, void *ctx) { move(1); }
 static void select(ClickRecognizerRef r, void *ctx) {
-  if (detail_loaded()) detail_window_push(s_market, 0, cursor_x(), s_house);
+  if (detail_loaded()) detail_window_push(s_market, 0, cursor_x());
 }
 static void select_long(ClickRecognizerRef r, void *ctx) {
-  s_house = !s_house;
+  next_line(market());
   layer_mark_dirty(s_layer);
 }
 
@@ -217,6 +218,7 @@ static void unload(Window *w) {
 void market_window_push(int index) {
   s_market = index;
   s_li = -1;
+  if (g_line == LINE_YOU && !(g_markets[index].flags & MF_MINE)) g_line = LINE_CROWD;
   s_window = window_create();
   window_set_background_color(s_window, C_BG);
   window_set_click_config_provider(s_window, clicks);
