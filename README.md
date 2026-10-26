@@ -30,7 +30,7 @@ Back steps out. A shake (wrist flick) refreshes from anywhere.
   per bar and a long tick each January.
 - **Point chart**: every bar of the curve, the shown line as the bar and the
   other line as a tick across it; the big digits are the selected bar's
-  probability, with the other line under it.
+  probability, with the curve's name under it.
 - **Status column**: Crowd, House or You lit for the line shown. You appears
   once you're signed in, on markets you've forecast on (bars you haven't
   touched read the house's). The digits turn red on a settled bar, and
