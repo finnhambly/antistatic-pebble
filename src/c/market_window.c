@@ -60,23 +60,58 @@ static void init_cursor(void) {
 
 static int32_t cursor_x(void) { return s_x; }
 
-// A curve's bar at x. Past the end of a curve's own bars it reads off its
-// last (or, for thresholds, first) bar, and *bound says the true value is
-// below ('<') or above ('>') it: P(>= x) is under P(>= top threshold), and
-// P(by x) is over P(by the last date) for a separate event. A date
-// market's yearly curves end with their year, so theirs stand as they are.
-static const Point *row_point(int g, int32_t x, bool count, char *bound) {
-  const Point *pts, *p;
+static int value_of(const Point *p) { return line_value(p, g_line); }
+
+// A curve's reading at x: *v (per mille, -1 for none) and *flags, with
+// *bound '<' or '>' where the true value is only known to be below or above
+// *v. Counts: a settled curve with its outcome answers yes or no exactly;
+// between two of a curve's own thresholds an open curve reads between their
+// bars; past its top P(>= x) is under the top's, and before its first, over
+// the first's. Dates: the last bar by x; past a separate event's last date,
+// P(by x) is over its last.
+static void row_read(int g, int32_t x, bool count, int *v, uint8_t *flags, char *bound) {
+  const Point *pts;
   int n = group_points(g, &pts);
+  *v = -1;
+  *flags = 0;
   *bound = 0;
-  point_at(g, x, count, &p);
-  if (n == 0 || !p) return p;
-  if (x > pts[n - 1].x) *bound = count ? '<' : market()->kind == KIND_MULTIDATE ? '>' : 0;
-  else if (count && x < pts[0].x) *bound = '>';
-  return p;
+  if (count && g_detail.has_outcome[g]) {
+    bool yes = x <= g_detail.outcome[g];
+    *flags = PF_RESOLVED | (yes ? PF_YES : 0);
+    *v = yes ? 1000 : 0;
+    return;
+  }
+  if (n == 0) return;
+  if (!count) {
+    const Point *p;
+    point_at(g, x, false, &p);
+    if (!p) return;
+    *v = value_of(p);
+    *flags = p->flags;
+    if (x > pts[n - 1].x && market()->kind == KIND_MULTIDATE) *bound = '>';
+    return;
+  }
+  if (x < pts[0].x) { *v = value_of(&pts[0]); *flags = pts[0].flags; *bound = '>'; return; }
+  if (x > pts[n - 1].x) { *v = value_of(&pts[n - 1]); *flags = pts[n - 1].flags; *bound = '<'; return; }
+  int i = 0;
+  while (i + 1 < n && pts[i + 1].x <= x) i++;
+  const Point *a = &pts[i];
+  *flags = a->flags;
+  *v = value_of(a);
+  if (a->x == x || i + 1 >= n) return;
+  const Point *b = &pts[i + 1];
+  if (a->flags & PF_RESOLVED) {
+    // Settled without an outcome: known only where both sides agree.
+    if ((b->flags & PF_RESOLVED) && (b->flags & PF_YES) == (a->flags & PF_YES)) return;
+    if (!(a->flags & PF_YES)) return;  // no at a lower threshold stays no
+    *v = -1;
+    *flags = 0;
+    return;
+  }
+  int va = value_of(a), vb = value_of(b);
+  if (va >= 0 && vb >= 0) *v = va + (int)((int64_t)(vb - va) * (x - a->x) / (b->x - a->x));
 }
 
-static int value_of(const Point *p) { return line_value(p, g_line); }
 
 static int scale_pos(int32_t v, int32_t lo, int32_t hi, int x0, int w) {
   if (hi <= lo) return x0;
@@ -137,9 +172,11 @@ static void update(Layer *layer, GContext *ctx) {
     snprintf(prefix, sizeof(prefix), "By");
   }
   for (int g = 0; g < g_detail.ngroups; g++) {
-    const Point *p;
-    point_at(g, x, count, &p);
-    if (p && (p->flags & PF_RESOLVED)) settled = true;
+    int v;
+    uint8_t f;
+    char b;
+    row_read(g, x, count, &v, &f, &b);
+    if (f & PF_RESOLVED) settled = true;
   }
   int rh_read = g_theme.big ? 40 : 30;
   draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count, digits, count ? 0 : 4, unit, g_line, settled);
@@ -171,9 +208,9 @@ static void update(Layer *layer, GContext *ctx) {
 
   for (int g = 0; g < ng && y + L.rh <= bottom + 2; g++) {
     char bound;
-    const Point *p = row_point(g, x, count, &bound);
-    int v = value_of(p);
-    uint8_t flags = p ? p->flags : 0;
+    int v;
+    uint8_t flags;
+    row_read(g, x, count, &v, &flags, &bound);
     GColor vcol, bcol;
     char value[12];
     row_value(value, sizeof(value), v, flags, &vcol, &bcol);
@@ -188,9 +225,10 @@ static void update(Layer *layer, GContext *ctx) {
       snprintf(value, sizeof(value), "%c%s", bound, num);
     }
     GRect bar = row_draw(ctx, &L, c, y, m->groups[g].label, value, vcol);
-    bool yes = (flags & PF_RESOLVED) && (flags & PF_YES);
+    // A settled bar fills for yes and empties for no, whatever was forecast.
+    bool settled_bar = flags & PF_RESOLVED, yes = settled_bar && (flags & PF_YES);
     if (count) draw_count_band(ctx, bar, m, &m->groups[g]);
-    else draw_prob_bar(ctx, bar, yes ? 1000 : (v < 0 ? 0 : v), bcol);
+    else draw_prob_bar(ctx, bar, yes ? 1000 : (settled_bar || v < 0 ? 0 : v), bcol);
     y += L.rh;
   }
 

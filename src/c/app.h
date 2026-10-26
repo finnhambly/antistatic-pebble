@@ -5,7 +5,7 @@
 #if defined(PBL_PLATFORM_APLITE)
 #define MAX_MARKETS 4
 #define MAX_GROUPS 4
-#define MAX_POINTS 120
+#define MAX_POINTS 80  // the phone thins each curve to fit (index.js watchLimits)
 #define LABEL_LEN 20
 #define INBOX_SIZE 640
 #else
@@ -47,7 +47,8 @@ enum { LINE_CROWD = 0, LINE_HOUSE = 1, LINE_YOU = 2 };
 // Sign-in, as the phone reports it.
 enum { AUTH_OUT = 0, AUTH_CODE = 1, AUTH_IN = 2, AUTH_EXPIRED = 3, AUTH_DENIED = 4, AUTH_ERROR = 5, AUTH_STARTING = 6 };
 // Bar flags.
-enum { PF_RESOLVED = 1, PF_YES = 2, PF_ENDED = 4 };
+// PF_OUTCOME: not a bar but a settled curve's outcome, sent after its bars.
+enum { PF_RESOLVED = 1, PF_YES = 2, PF_ENDED = 4, PF_OUTCOME = 8 };
 // Date cadence, from the market's x_unit.
 enum { CAD_DAY = 0, CAD_WEEK = 1, CAD_MONTH = 2, CAD_QUARTER = 3, CAD_YEAR = 4 };
 
@@ -90,6 +91,9 @@ typedef struct {
   bool ready;
   uint8_t ngroups;
   uint16_t start[MAX_GROUPS], count[MAX_GROUPS];
+  uint16_t got[MAX_GROUPS];  // bars received in order so far
+  int32_t outcome[MAX_GROUPS];  // a settled count curve's value; has_outcome says if
+  bool has_outcome[MAX_GROUPS];
   uint16_t npts;
   Point pts[MAX_POINTS];
 } Detail;

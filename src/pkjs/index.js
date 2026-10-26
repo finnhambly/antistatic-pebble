@@ -20,6 +20,7 @@ var MSG = {
 };
 var MF = { RESOLVED: 1, CUMULATIVE: 2, PRIVATE: 4, MINE: 8 };
 var NONE = 0xffff; // no forecast of yours on this bar
+var OUTCOME = 8;    // a bar's flag: a settled curve's outcome, sent after its bars
 var CADENCE = { day: 0, week: 1, month: 2, quarter: 3, year: 4 };
 var DAY_MS = 86400000;
 var EPOCH_2000 = Date.UTC(2000, 0, 1);
@@ -30,6 +31,7 @@ var byCode = {};
 var fetching = false;
 var refetch = false;  // a fetch was asked for while one ran
 var pendingDetail = null; // asked for before the first fetch finished
+var lastDetail = null;    // the market whose bars the watch last asked for
 
 // --- Messaging -------------------------------------------------------------
 
@@ -266,13 +268,11 @@ function buildModel(market, forecast, subs) {
     .map(function (k) {
       var g = groups[k];
       g.points.sort(function (a, b) { return a.x - b.x; });
-      // A settled year whose bars stop at its outcome (a single "at least
-      // this" bar) gets a no just above it, so stepping past reads No.
-      var top = g.points[g.points.length - 1];
+      // A settled year's outcome, after its bars: the watch answers yes or
+      // no from it at any threshold, between or beyond the curve's own bars.
       var v = count && settled[k];
-      if (typeof v === 'number' && top && top.flags & 1) {
-        var vx = Math.round(v * scale * 100);
-        if (top.x <= vx) g.points.push({ x: vx + 1, crowd: 0, house: 0, mine: NONE, flags: 1 });
+      if (typeof v === 'number' && g.points.every(function (p) { return p.flags & 1; })) {
+        g.points.push({ x: Math.round(v * scale * 100), crowd: 0, house: 0, mine: NONE, flags: 1 | OUTCOME });
       }
       var label = eventLabels[k] || g.label || curveLabel(k, order);
       return { label: String(label).slice(0, 47), points: g.points };
@@ -293,7 +293,8 @@ function buildModel(market, forecast, subs) {
   if (count) {
     var lo = Infinity, hi = -Infinity;
     list.forEach(function (g) {
-      var pairs = g.points.map(function (p) { return [p.x, p.crowd / 1000]; });
+      var pairs = g.points.filter(function (p) { return !(p.flags & OUTCOME); })
+        .map(function (p) { return [p.x, p.crowd / 1000]; });
       g.q = [5, 25, 50, 75, 95].map(function (pct) { return Math.round(countPercentile(pct, pairs)); });
       g.prob = 0;
       lo = Math.min(lo, g.q[0]);
@@ -340,10 +341,13 @@ function u16(out, v) { out.push(v & 255, (v >> 8) & 255); }
 
 function sendSummaries(statusText) {
   var total = Math.min(models.length, maxMarkets());
+  var lim = watchLimits();
   for (var i = 0; i < total; i++) {
     var m = models[i];
     var data = [];
-    m.groups.forEach(function (g) {
+    // Within the watch's inbox: aplite's holds 640 bytes.
+    var groups = m.groups.slice(0, lim.groups);
+    groups.forEach(function (g) {
       for (var k = 0; k < 5; k++) i32(data, g.q[k]);
       u16(data, g.prob || 0);
       data.push(g.flags || 0);
@@ -352,7 +356,7 @@ function sendSummaries(statusText) {
       Type: MSG.SUMMARY, Index: i, Total: total,
       Code: m.code, Title: m.title.slice(0, 71), Sub: m.sub,
       Unit: m.unit.join('\t'),
-      Labels: m.groups.map(function (g) { return g.label; }).join('\n'),
+      Labels: groups.map(function (g) { return g.label.slice(0, lim.label); }).join('\n'),
       Kind: m.kind, Flags: m.flags, Cadence: m.cadence, Lo: m.lo, Hi: m.hi,
       Data: data,
     });
@@ -361,15 +365,19 @@ function sendSummaries(statusText) {
 }
 
 function sendDetail(m) {
-  m.groups.forEach(function (g, gi) {
-    var chunk = maxMarkets() < MAX_MARKETS ? 40 : CHUNK;
-    for (var off = 0; off < g.points.length; off += chunk) {
+  var lim = watchLimits();
+  var groups = m.groups.slice(0, lim.groups);
+  var share = Math.floor(lim.points / Math.max(1, groups.length));
+  groups.forEach(function (g, gi) {
+    var chunk = aplite() ? 40 : CHUNK;
+    var points = thin(g.points, share);
+    for (var off = 0; off < points.length; off += chunk) {
       var data = [];
-      g.points.slice(off, off + chunk).forEach(function (p) {
+      points.slice(off, off + chunk).forEach(function (p) {
         i32(data, p.x); u16(data, p.crowd); u16(data, p.house); u16(data, p.mine === undefined ? NONE : p.mine);
         data.push(p.flags);
       });
-      send({ Type: MSG.DETAIL, Code: m.code, Group: gi, Offset: off, GroupTotal: g.points.length, Data: data });
+      send({ Type: MSG.DETAIL, Code: m.code, Group: gi, Offset: off, GroupTotal: points.length, Data: data });
     }
   });
   send({ Type: MSG.DETAIL_DONE, Code: m.code });
@@ -394,9 +402,31 @@ function saveCache() {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(models)); } catch (e) { /* too big: skip */ }
 }
 
-function maxMarkets() {
+function aplite() {
   var info = Pebble.getActiveWatchInfo && Pebble.getActiveWatchInfo();
-  return info && info.platform === 'aplite' ? 4 : MAX_MARKETS;
+  return !!info && info.platform === 'aplite';
+}
+
+function maxMarkets() { return aplite() ? 4 : MAX_MARKETS; }
+
+// What the watch holds (app.h): curves per market, bars in all, label length.
+function watchLimits() {
+  return aplite() ? { groups: 4, points: 80, label: 19 } : { groups: MAX_GROUPS, points: 480, label: 47 };
+}
+
+// At most n of a curve's bars, evenly spread with both ends kept, so every
+// curve fits in the watch's share of bars; the outcome stays last.
+function thin(points, n) {
+  if (points.length <= n) return points;
+  var outcome = points.filter(function (p) { return p.flags & OUTCOME; });
+  var bars = points.filter(function (p) { return !(p.flags & OUTCOME); });
+  var room = Math.max(2, n - outcome.length);
+  var kept = [];
+  for (var i = 0; i < room; i++) {
+    var p = bars[Math.round(i * (bars.length - 1) / (room - 1))];
+    if (kept[kept.length - 1] !== p) kept.push(p);
+  }
+  return kept.concat(outcome);
 }
 
 function loadPicks() {
@@ -463,7 +493,9 @@ function fetchAll() {
       setModels(built.filter(function (m) { return m && m.groups.length; }));
       saveCache();
       sendSummaries('Live');
-      if (pendingDetail && byCode[pendingDetail]) sendDetail(byCode[pendingDetail]);
+      // The open market's bars again, so they match its fresh card.
+      var again = pendingDetail || lastDetail;
+      if (again && byCode[again]) sendDetail(byCode[again]);
       pendingDetail = null;
       fetchChoices(false);
     });
@@ -508,6 +540,7 @@ Pebble.addEventListener('appmessage', function (e) {
       var t = item.msg.Type;
       return (sending && i === 0) || (t !== MSG.DETAIL && t !== MSG.DETAIL_DONE) || item.msg.Code === p.Code;
     });
+    lastDetail = p.Code;
     var m = byCode[p.Code];
     if (m) sendDetail(m);
     else if (fetching) pendingDetail = p.Code;

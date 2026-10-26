@@ -112,17 +112,26 @@ static void on_detail(DictionaryIterator *it) {
     g_detail.npts += g_detail.count[g];
     if (g + 1 > g_detail.ngroups) g_detail.ngroups = g + 1;
   }
+  // Chunks only in order: after a lost one the curve stops at the gap,
+  // rather than showing empty bars as data.
+  if (offset != g_detail.got[g]) return;
   int n = data->length / 11;
   for (int i = 0; i < n; i++) {
     int k = offset + i;
     if (k >= g_detail.count[g]) break;
     const uint8_t *p = data->value->data + i * 11;
-    Point *pt = &g_detail.pts[g_detail.start[g] + k];
+    if (p[10] & PF_OUTCOME) {
+      g_detail.outcome[g] = rd_i32(p);
+      g_detail.has_outcome[g] = true;
+      continue;
+    }
+    Point *pt = &g_detail.pts[g_detail.start[g] + g_detail.got[g]];
     pt->x = rd_i32(p);
     pt->crowd = rd_u16(p + 4);
     pt->house = rd_u16(p + 6);
     pt->mine = rd_u16(p + 8);
     pt->flags = p[10];
+    g_detail.got[g]++;
   }
 }
 
@@ -132,6 +141,9 @@ static void inbox(DictionaryIterator *it, void *ctx) {
     case MSG_SUMMARY: on_summary(it); break;
     case MSG_LIST_DONE:
       g_list_done = true;
+      // The list's own total: an empty refresh empties the list.
+      g_market_total = tuple_int(dict_find(it, MESSAGE_KEY_Total));
+      if (g_market_total > MAX_MARKETS) g_market_total = MAX_MARKETS;
       g_market_count = g_market_total;
       copy_str(g_status, sizeof(g_status), dict_find(it, MESSAGE_KEY_Status));
       list_window_refresh();
@@ -140,7 +152,11 @@ static void inbox(DictionaryIterator *it, void *ctx) {
     case MSG_DETAIL_DONE: {
       char code[CODE_LEN];
       copy_str(code, CODE_LEN, dict_find(it, MESSAGE_KEY_Code));
-      if (strcmp(code, g_detail.code) == 0) g_detail.ready = true;
+      if (strcmp(code, g_detail.code) == 0) {
+        // Each curve is what arrived of it.
+        for (int g = 0; g < g_detail.ngroups; g++) g_detail.count[g] = g_detail.got[g];
+        g_detail.ready = true;
+      }
       market_window_refresh();
       detail_window_refresh();
       break;

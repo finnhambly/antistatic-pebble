@@ -33,10 +33,12 @@ function form(obj) {
   }).join('&');
 }
 
-// POST a form; cb(status, body). Status 0 is a network failure.
+// POST a form; cb(status, body). Status 0 is a network failure or no answer
+// in 30 s, so a stalled refresh can't hold up every request behind it.
 function post(path, fields, cb) {
   var xhr = new XMLHttpRequest();
   xhr.open('POST', config.base + path, true);
+  xhr.timeout = 30000;
   xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
   xhr.setRequestHeader('Accept', 'application/json');
   xhr.onload = function () {
@@ -44,7 +46,7 @@ function post(path, fields, cb) {
     try { body = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
     cb(xhr.status, body);
   };
-  xhr.onerror = function () { cb(0, {}); };
+  xhr.onerror = xhr.ontimeout = function () { cb(0, {}); };
   xhr.send(form(fields));
 }
 
@@ -73,7 +75,10 @@ function refresh(cb) {
   if (!auth || !auth.refresh) return cb(false);
   if (refreshing) return refreshing.push(cb);
   refreshing = [cb];
+  var was = auth;
   post('/oauth/token', { grant_type: 'refresh_token', refresh_token: auth.refresh, client_id: CLIENT_ID }, function (status, body) {
+    // Signed out (or in again) while it ran: its tokens belong to no one now.
+    if (auth !== was) status = 0;
     var ok = status === 200 && !!body.access_token;
     if (ok) store(body);
     else if (status === 400 || status === 401) { auth = null; save(); changed(); }
