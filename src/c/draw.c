@@ -38,8 +38,13 @@ void fill_dither(GContext *ctx, GRect r, int density) {
 
 // The unlit part of a bar.
 void draw_track(GContext *ctx, GRect r) {
-  graphics_context_set_stroke_color(ctx, PBL_IF_COLOR_ELSE(GColorLightGray, GColorWhite));
-  fill_dither(ctx, r, PBL_IF_COLOR_ELSE(2, 4));
+#if defined(PBL_COLOR)
+  graphics_context_set_fill_color(ctx, C_GHOST);
+  graphics_fill_rect(ctx, r, 0, GCornerNone);
+#else
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+  fill_dither(ctx, r, 4);
+#endif
 }
 
 void draw_text(GContext *ctx, const char *s, GFont font, GRect r, GTextAlignment align, GColor color) {

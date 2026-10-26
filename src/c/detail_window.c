@@ -94,18 +94,18 @@ static void update(Layer *layer, GContext *ctx) {
     bool sel = first + i == s_idx;
 #if defined(PBL_COLOR)
     bool qres = q->flags & PF_RESOLVED;
-    draw_track(ctx, GRect(bx, ch.origin.y, bw, ch.size.h - h));
+    graphics_context_set_fill_color(ctx, C_GHOST);
+    graphics_fill_rect(ctx, GRect(bx, ch.origin.y, bw, ch.size.h - h), 0, GCornerNone);
     GColor col = sel ? C_LIT : (qres ? ((q->flags & PF_YES) ? C_BAR : GColorDarkGray) : C_BAND_OUT);
     if (sel && qres && (q->flags & PF_YES)) col = C_BAR;
     graphics_context_set_fill_color(ctx, col);
     graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
 #else
-    // The selected bar solid, the rest dithered; settled-No bars sparser.
-    bool qres = q->flags & PF_RESOLVED;
+    // The selected bar solid, the rest in outline.
     graphics_context_set_fill_color(ctx, GColorWhite);
     graphics_context_set_stroke_color(ctx, GColorWhite);
-    if (sel) graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
-    else fill_dither(ctx, GRect(bx, base - h, bw, h), qres && !(q->flags & PF_YES) ? 4 : 2);
+    if (sel || bw < 3 || h < 3) graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
+    else graphics_draw_rect(ctx, GRect(bx, base - h, bw, h));
 #endif
   }
 
