@@ -43,8 +43,8 @@ Back steps out. A shake (wrist flick) refreshes from anywhere.
 
 Hold Select on the market list. The watch shows an eight-digit code: type it
 at antistatic.exchange/link on any browser where you're signed in, or open
-the app's settings in the phone's Pebble app and tap Sign in, which opens
-that page with the code filled in. Approve, and the watch buzzes twice and
+the app's settings in the phone's Pebble app and tap Sign in, which goes to
+that page, inside settings, with the code filled in. Approve, and the watch buzzes twice and
 goes back to the list, now with your private markets and your forecasts.
 
 The phone keeps the tokens (read-only, refreshed as they expire); they never

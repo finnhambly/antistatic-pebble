@@ -510,7 +510,7 @@ function fetchChoices(force, cb) {
 function openSettings(markets) {
   var cur = auth.current();
   Pebble.openURL(settings.url({
-    auth: { signedIn: cur.state === auth.STATE.IN, name: cur.name || '' },
+    auth: { signedIn: cur.state === auth.STATE.IN, name: cur.name || '', link: auth.pendingUrl() || '' },
     max: maxMarkets(),
     picks: loadPicks(),
     markets: markets || models.map(function (m) { return { code: m.code, title: m.title, private: !!(m.flags & MF.PRIVATE) }; }),
@@ -520,9 +520,19 @@ function openSettings(markets) {
 // Settings in the phone's Pebble app: the account, and which markets show in
 // what order.
 Pebble.addEventListener('showConfiguration', function () {
-  var kept = loadChoices();
-  if (kept) return openSettings(kept.markets);
-  fetchChoices(true, openSettings);
+  var open = function () {
+    var kept = loadChoices();
+    if (kept) return openSettings(kept.markets);
+    fetchChoices(true, openSettings);
+  };
+  // Signed out: get a code first, so Sign in goes straight to the approval
+  // page inside settings (the phone app won't open a second page after this
+  // one closes). Waits at most a few seconds for it.
+  if (auth.signedIn() || auth.pendingUrl()) return open();
+  var opened = false;
+  var once = function () { if (!opened) { opened = true; open(); } };
+  auth.startSignIn(signedIn, once);
+  setTimeout(once, 3000);
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {

@@ -24,6 +24,7 @@ var CSS = [
   '.tag{font-size:11px;color:#ff3b5c;border:1px solid #ff3b5c;padding:0 4px}',
   'button{flex:none;font:inherit;color:#fff;background:#000;border:1px solid #3b5b75;min-width:40px;height:36px;padding:0 10px}',
   'button:disabled{opacity:.3}',
+  'a.btn{flex:none;display:inline-flex;align-items:center;color:#000;background:#68a6cb;height:36px;padding:0 10px;text-decoration:none}',
   'button.on{background:#68a6cb;border-color:#68a6cb;color:#000}',
   '.seg{display:flex}.seg button{flex:1}.seg button+button{border-left:0}',
   'input{width:100%;font:inherit;color:#fff;background:#000;border:1px solid #3b5b75;height:40px;padding:0 10px;margin-bottom:4px}',
@@ -32,7 +33,7 @@ var CSS = [
   '.save button{width:100%;height:48px;background:#68a6cb;border-color:#68a6cb;color:#000;font-weight:600}',
 ].join('');
 
-// Runs in the page. STATE: { auth: {signedIn, name}, max, picks: [market] or
+// Runs in the page. STATE: { auth: {signedIn, name, link}, max, picks: [market] or
 // null for the time-sensitive order, markets: [market] in that order }, where
 // a market is { code, title, private }.
 var APP = '(' + function () {
@@ -60,7 +61,10 @@ var APP = '(' + function () {
     list.forEach(function (m) { codes[m.code] = true; });
     var h = '<h2>Account</h2><div class="row"><span class="t">' +
       (STATE.auth.signedIn ? esc(STATE.auth.name || 'Signed in') : '<span class="dim">Not signed in</span>') +
-      '</span><button data-a="' + (STATE.auth.signedIn ? 'signout">Sign out' : 'signin">Sign in') + '</button></div>';
+      '</span>' + (STATE.auth.signedIn ? '<button data-a="signout">Sign out</button>'
+        // The approval page, with the watch's code already in it.
+        : STATE.auth.link ? '<a class="btn" href="' + esc(STATE.auth.link) + '">Sign in</a>'
+        : '<button data-a="signin">Sign in</button>') + '</div>';
     h += '<h2>Markets</h2><div class="seg">' +
       '<button data-a="time" class="' + (picks ? '' : 'on') + '">Time sensitive</button>' +
       '<button data-a="pick" class="' + (picks ? 'on' : '') + '">My pick</button></div>';
