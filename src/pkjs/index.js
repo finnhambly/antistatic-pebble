@@ -206,6 +206,20 @@ function curveLabel(key, keys) {
   return yearly ? d[1] : Number(d[3]) + ' ' + MONTHS[Number(d[2]) - 1] + ' ' + d[1];
 }
 
+// A market split into periods shows its open periods and, as their starting
+// point, only the latest settled one: the forecast is the point, not the
+// history. With every period settled, the latest ones.
+function recentPeriods(keys, groups, settledCurve) {
+  var done = function (k) {
+    return settledCurve[k] || groups[k].points.every(function (p) { return p.flags & 1; });
+  };
+  var open = keys.filter(function (k) { return !done(k); });
+  if (!open.length) return keys.slice(-MAX_GROUPS);
+  var first = keys.indexOf(open[0]);
+  var before = keys.slice(0, first).filter(done);
+  return (before.length ? [before[before.length - 1]] : []).concat(keys.slice(first));
+}
+
 function buildModel(market, forecast, subs) {
   var kind = forecast.multidate ? 2 : (market.type === 'count' ? 0 : 1);
   var count = kind === 0;
@@ -214,8 +228,11 @@ function buildModel(market, forecast, subs) {
 
   // Curves in the order the API lists them.
   var order = (forecast.curves || []).map(function (c) { return c.curve; });
-  var settled = {};
-  (forecast.curves || []).forEach(function (c) { settled[c.curve] = c.resolved_value; });
+  var settled = {}, settledCurve = {};
+  (forecast.curves || []).forEach(function (c) {
+    settled[c.curve] = c.resolved_value;
+    settledCurve[c.curve] = c.status === 'resolved';
+  });
   var groups = {};
   var hasMine = false;
   // Thresholds the site writes scaled ($m shown as $bn).
@@ -243,8 +260,9 @@ function buildModel(market, forecast, subs) {
     forecast.multidate.event_details.forEach(function (e) { eventLabels[e.key] = e.label; });
   }
 
-  var list = order.filter(function (k) { return groups[k] && groups[k].points.length; })
-    .slice(0, MAX_GROUPS)
+  var keys = order.filter(function (k) { return groups[k] && groups[k].points.length; });
+  if (!forecast.multidate) keys = recentPeriods(keys, groups, settledCurve);
+  var list = keys.slice(0, MAX_GROUPS)
     .map(function (k) {
       var g = groups[k];
       g.points.sort(function (a, b) { return a.x - b.x; });

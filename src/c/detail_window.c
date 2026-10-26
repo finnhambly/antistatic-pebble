@@ -11,7 +11,6 @@ static int s_market, s_group, s_idx;
 static const Summary *market(void) { return &g_markets[s_market]; }
 
 static int shown(const Point *p) { return line_value(p, g_line); }
-static int other(const Point *p) { return line_value(p, other_line(g_line)); }
 
 static void bar_label(char *buf, size_t n, const Point *p) {
   const Summary *m = market();
@@ -87,20 +86,14 @@ static void update(Layer *layer, GContext *ctx) {
   int x0 = ch.origin.x + (ch.size.w - visible * pitch) / 2;
   int base = ch.origin.y + ch.size.h;
 
-  // Even odds.
-  graphics_context_set_stroke_color(ctx, C_DIM);
-  for (int x = ch.origin.x; x < ch.origin.x + ch.size.w; x += 4) {
-    graphics_draw_pixel(ctx, GPoint(x, ch.origin.y + ch.size.h / 2));
-  }
-
   for (int i = 0; i < visible; i++) {
     const Point *q = &pts[first + i];
     int bx = x0 + i * pitch;
     int h = ch.size.h * shown(q) / 1000;
     if (h < 1) h = 1;
     bool sel = first + i == s_idx;
-    bool qres = q->flags & PF_RESOLVED;
 #if defined(PBL_COLOR)
+    bool qres = q->flags & PF_RESOLVED;
     graphics_context_set_fill_color(ctx, C_GHOST);
     graphics_fill_rect(ctx, GRect(bx, ch.origin.y, bw, ch.size.h - h), 0, GCornerNone);
     GColor col = sel ? C_LIT : (qres ? ((q->flags & PF_YES) ? C_BAR : GColorDarkGray) : C_BAND_OUT);
@@ -108,15 +101,12 @@ static void update(Layer *layer, GContext *ctx) {
     graphics_context_set_fill_color(ctx, col);
     graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
 #else
+    // The selected bar solid, the rest in outline.
     graphics_context_set_fill_color(ctx, GColorWhite);
     graphics_context_set_stroke_color(ctx, GColorWhite);
-    if (sel) graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
-    else fill_dither(ctx, GRect(bx, base - h, bw, h), qres && !(q->flags & PF_YES) ? 4 : 2);
+    if (sel || bw < 3 || h < 3) graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
+    else graphics_draw_rect(ctx, GRect(bx, base - h, bw, h));
 #endif
-    // The other line, as a tick across the bar.
-    int oh = ch.size.h * other(q) / 1000;
-    graphics_context_set_fill_color(ctx, sel ? C_BAND_OUT : C_TEXT);
-    graphics_fill_rect(ctx, GRect(bx - (pitch >= 5 ? 1 : 0), base - oh - 1, bw + (pitch >= 5 ? 2 : 0), 1), 0, GCornerNone);
   }
 
   // Marker under the selected bar, and the ends of the window.

@@ -178,5 +178,4 @@ int point_at(int g, int32_t x, bool count, const Point **out);
 void bump_detent(int before, int after);
 int line_value(const Point *p, int line);
 const char *line_name(int line);
-int other_line(int line);
 void next_line(const Summary *m);

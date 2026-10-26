@@ -28,9 +28,12 @@ Back steps out. A shake (wrist flick) refreshes from anywhere.
 - **Tuner, date markets**: the readout is the date (By 2027 Dec), each row
   is the probability by then, and the needle runs along a dial with a tick
   per bar and a long tick each January.
-- **Point chart**: every bar of the curve, the shown line as the bar and the
-  other line as a tick across it; the big digits are the selected bar's
+- **Point chart**: every bar of the curve (the selected one solid, in
+  outline on black-and-white watches); the big digits are the selected bar's
   probability, with the curve's name under it.
+- **History**: a market split into periods (a year each, say) shows its open
+  periods and only the latest settled one, as the starting point. Separate
+  events keep their settled rows.
 - **Status column**: Crowd, House or You lit for the line shown. You appears
   once you're signed in, on markets you've forecast on (bars you haven't
   touched read the house's). The digits turn blue on a settled bar, and

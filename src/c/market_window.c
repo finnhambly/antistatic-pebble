@@ -261,7 +261,17 @@ static void move(int d) {
 static void up(ClickRecognizerRef r, void *ctx) { move(-1); }
 static void down(ClickRecognizerRef r, void *ctx) { move(1); }
 static void select(ClickRecognizerRef r, void *ctx) {
-  if (detail_loaded()) detail_window_push(s_market, 0, cursor_x());
+  if (!detail_loaded()) return;
+  // The first curve still open: the settled one before it is only context.
+  int g = 0;
+  for (int i = 0; i < shown_groups(); i++) {
+    const Point *pts;
+    int n = group_points(i, &pts);
+    bool open = false;
+    for (int k = 0; k < n && !open; k++) open = !(pts[k].flags & PF_RESOLVED);
+    if (open) { g = i; break; }
+  }
+  detail_window_push(s_market, g, cursor_x());
 }
 static void select_long(ClickRecognizerRef r, void *ctx) {
   next_line(market());

@@ -49,9 +49,6 @@ int line_value(const Point *p, int line) {
 
 const char *line_name(int line) { return line == LINE_CROWD ? "Crowd" : line == LINE_HOUSE ? "House" : "You"; }
 
-// The line shown beside the main one.
-int other_line(int line) { return line == LINE_CROWD ? LINE_HOUSE : LINE_CROWD; }
-
 // Crowd, house, then yours where you have a forecast on the market.
 void next_line(const Summary *m) {
   g_line = (g_line + 1) % 3;
