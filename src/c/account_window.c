@@ -63,11 +63,10 @@ static void update(Layer *layer, GContext *ctx) {
       int w = segments_width(h, "8888", 4);
       int x = PBL_IF_ROUND_ELSE(c.origin.x + (c.size.w - w) / 2, c.origin.x);
       for (int i = 0; i < 2; i++) draw_segments(ctx, GRect(x, y + i * (h + gap), w, h), half[i], 4, false);
-      draw_text(ctx, "Waiting", g_theme.small, GRect(c.origin.x, foot - 3, c.size.w, g_theme.lh + 4), align, C_DIM);
       break;
     }
     case AUTH_IN:
-      lines(ctx, c, y, g_auth.text[0] ? g_auth.text : "Signed in", "Your forecasts and private markets", C_TEXT);
+      lines(ctx, c, y, g_auth.text[0] ? g_auth.text : "Signed in", NULL, C_TEXT);
       draw_text(ctx, "Hold to sign out", g_theme.small, GRect(c.origin.x, foot - 3, c.size.w, g_theme.lh + 4), align, C_DIM);
       break;
     case AUTH_STARTING:

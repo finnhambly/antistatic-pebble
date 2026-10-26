@@ -12,7 +12,7 @@
 #define MAX_MARKETS 24
 #define MAX_GROUPS 6
 #define MAX_POINTS 480
-#define LABEL_LEN 28
+#define LABEL_LEN 48
 #define INBOX_SIZE 2048
 #endif
 #define TITLE_LEN 72

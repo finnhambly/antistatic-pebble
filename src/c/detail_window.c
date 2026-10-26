@@ -55,14 +55,10 @@ static void update(Layer *layer, GContext *ctx) {
   draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh), NULL, false, digits, 0, "%", g_line, res);
   y += rh + 2;
 
-  // What the bar is, and the other line.
-  char label[28], second[LABEL_LEN + 24], ov[10];
+  // What the bar is, and which curve (in full, on up to two lines).
+  char label[28];
   bar_label(label, sizeof(label), p);
-  fmt_prob(ov, sizeof(ov), other(p), true);
-  // The curve's name leads this line when there's more than one.
-  const char *curve = m->groups[s_group].label;
-  if (curve[0] && g_detail.ngroups > 1) snprintf(second, sizeof(second), "%s · %s %s", curve, line_name(other_line(g_line)), ov);
-  else snprintf(second, sizeof(second), "%s %s", line_name(other_line(g_line)), ov);
+  const char *curve = g_detail.ngroups > 1 ? m->groups[s_group].label : "";
   int lh = g_theme.big ? 22 : 18;
   if (count) {
     draw_geq(ctx, GPoint(c.origin.x + 1, y + 4), 6, C_TEXT);
@@ -73,8 +69,7 @@ static void update(Layer *layer, GContext *ctx) {
   // Which curve of how many, beside the bar it's on.
   if (pager[0]) draw_text(ctx, pager, g_theme.small, GRect(c.origin.x, y - 1, c.size.w - g_theme.edge, lh), GTextAlignmentRight, C_DIM);
   y += lh - 2;
-  draw_text(ctx, second, g_theme.small, GRect(c.origin.x, y - 3, c.size.w, g_theme.lh + 4), GTextAlignmentLeft, C_DIM);
-  y += g_theme.lh;
+  if (curve[0]) y += draw_wrapped(ctx, curve, g_theme.small, GRect(c.origin.x, y - 3, c.size.w, g_theme.lh * 2 + 2), GTextAlignmentLeft, C_DIM);
 
   // The point chart.
   int axis_h = g_theme.lh;

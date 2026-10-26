@@ -229,7 +229,7 @@ function buildModel(market, forecast, subs) {
       var g = groups[k];
       g.points.sort(function (a, b) { return a.x - b.x; });
       var label = eventLabels[k] || g.label || (k === 'main' ? '' : k);
-      return { label: String(label).slice(0, 27), points: g.points };
+      return { label: String(label).slice(0, 47), points: g.points };
     });
 
   var model = {

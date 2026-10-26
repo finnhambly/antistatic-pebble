@@ -68,7 +68,7 @@ static void update(Layer *layer, GContext *ctx) {
   int y = c.origin.y;
   int tl = g_theme.big ? 20 : 16;
   int ng0 = m->ngroups > 0 ? m->ngroups : 1;
-  int room = c.size.h - (g_theme.big ? 46 : 36) - ng0 * (g_theme.big ? 22 : 17) - (g_theme.lh + 6);
+  int room = c.size.h - (g_theme.big ? 44 : 34) - ng0 * (g_theme.big ? 15 : 12) - (g_theme.lh + 6);
   if (room < tl + 2) room = tl + 2;
   if (room > tl * 4 + 2) room = tl * 4 + 2;
   y += draw_wrapped(ctx, m->title, g_theme.small_bold,

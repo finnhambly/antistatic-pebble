@@ -163,7 +163,7 @@ void draw_indicators(GContext *ctx, GRect r, int line) {
   }
 }
 
-// "antistatic." with the red full stop, a counter or status on the right.
+// "antistatic", and a counter on the right.
 // Text wrapped within box; returns the height it took.
 int draw_wrapped(GContext *ctx, const char *s, GFont font, GRect box, GTextAlignment align, GColor color) {
   draw_text(ctx, s, font, box, align, color);
@@ -186,11 +186,6 @@ void draw_header(GContext *ctx, GRect c, const char *left, const char *right, bo
     rw = rs.w + 6;
   }
   draw_text(ctx, left, f, GRect(row.origin.x, row.origin.y, row.size.w - rw, row.size.h), GTextAlignmentLeft, C_DIM);
-  if (strcmp(left, "antistatic") == 0) {
-    GSize sz = graphics_text_layout_get_content_size(left, f, row, GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-    graphics_context_set_fill_color(ctx, C_RED);
-    graphics_fill_rect(ctx, GRect(c.origin.x + sz.w + 1, c.origin.y + 10, 2, 2), 0, GCornerNone);
-  }
   if (right) draw_text(ctx, right, f, row, GTextAlignmentRight, busy ? C_RED : C_DIM);
 #endif
 }
@@ -324,8 +319,11 @@ void rows_layout(RowLayout *L, const Summary *m, int ng, GRect c, int top, int b
     int max_rh = g_theme.big ? 34 : 28;
     if (L->rh > max_rh) L->rh = max_rh;
     if (L->rh < 20) L->rh = 20;
+    // The label has the whole line above; the value sits after the bar,
+    // with room for a unit.
+    L->vw = g_theme.big ? 68 : 54;
     L->bx = c.origin.x;
-    L->bw = c.size.w;
+    L->bw = c.size.w - L->vw - 2;
   } else {
     L->lw = lw;
     L->rh = h / ng;
@@ -341,12 +339,13 @@ void rows_layout(RowLayout *L, const Summary *m, int ng, GRect c, int top, int b
 GRect row_draw(GContext *ctx, const RowLayout *L, GRect c, int y, const char *label, const char *value, GColor vcol) {
   int fh = g_theme.big ? 12 : 10;
   if (L->stacked) {
-    draw_text(ctx, label, g_theme.small, GRect(c.origin.x, y - 3, c.size.w - L->vw, g_theme.lh + 4), GTextAlignmentLeft, C_TEXT);
-    draw_text(ctx, value, g_theme.small_bold, GRect(c.origin.x + c.size.w - L->vw, y - 3, L->vw, 20), GTextAlignmentRight, vcol);
+    draw_text(ctx, label, g_theme.small, GRect(c.origin.x, y - 3, c.size.w, g_theme.lh + 4), GTextAlignmentLeft, C_TEXT);
     int top = g_theme.big ? 19 : 14;
     int bh = L->rh - top - 3;
     if (bh < 4) bh = 4;
     if (bh > 10) bh = 10;
+    draw_text(ctx, value, g_theme.small_bold, GRect(c.origin.x + c.size.w - L->vw, y + top + bh / 2 - fh, L->vw, 20),
+              GTextAlignmentRight, vcol);
     return GRect(L->bx, y + top, L->bw, bh);
   }
   if (L->lw) draw_text(ctx, label, g_theme.small, GRect(c.origin.x, y + L->rh / 2 - fh, L->lw + 2, g_theme.lh + 4), GTextAlignmentLeft, C_TEXT);
