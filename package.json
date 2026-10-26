@@ -1,0 +1,61 @@
+{
+  "name": "antistatic-pebble",
+  "author": "Finn Hambly",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app",
+    "forecasting"
+  ],
+  "private": true,
+  "license": "MIT",
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Antistatic",
+    "uuid": "70607caa-96e5-4790-a114-965828277152",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [],
+    "messageKeys": [
+      "Type",
+      "Index",
+      "Total",
+      "Code",
+      "Title",
+      "Unit",
+      "Kind",
+      "Flags",
+      "Cadence",
+      "Lo",
+      "Hi",
+      "Labels",
+      "Sub",
+      "Data",
+      "Group",
+      "Offset",
+      "GroupTotal",
+      "Status"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  }
+}
