@@ -1,6 +1,6 @@
 Antistatic (antistatic.exchange) is a forecasting website. On it, you can make forecasting questions and forecast on them, or forecast on public questions and build a track record. Each question has a probability for each date or value, for example "by the end of 2027" or "revenue of at least $10bn". Forecasts use points, not money. They are scored against base-rate starting probabilities, not against each other, so it helps everyone when people share evidence.
 
-This app shows Antistatic's forecasts on your watch. For each question, it shows the probabilities from the crowd's forecasts. Use Up and Down to move through the dates or values. Push Select to see all the probabilities for one date range or one event. Hold Select to show the starting probabilities (the house) or your own forecasts.
+This app shows Antistatic's forecasts on your watch. For each question, it shows the probabilities from the crowd's forecasts. Use Up and Down to move through the dates or values. Push Select to see all the probabilities for one year or one event. Hold Select to show the starting probabilities (the house) or your own forecasts.
 
 By default, the app shows the questions where the most points change in the next day. In the app's settings on your phone, you can select your own questions and put them in order.
 
