@@ -319,8 +319,8 @@ void rows_layout(RowLayout *L, const Summary *m, int ng, GRect c, int top, int b
     int max_rh = g_theme.big ? 34 : 28;
     if (L->rh > max_rh) L->rh = max_rh;
     if (L->rh < 20) L->rh = 20;
-    // The label has the whole line above; the value sits after the bar,
-    // with room for a unit.
+    // The label has the line above; the value sits after the bar, with room
+    // for a unit.
     L->vw = g_theme.big ? 68 : 54;
     L->bx = c.origin.x;
     L->bw = c.size.w - L->vw - 2;
@@ -339,7 +339,8 @@ void rows_layout(RowLayout *L, const Summary *m, int ng, GRect c, int top, int b
 GRect row_draw(GContext *ctx, const RowLayout *L, GRect c, int y, const char *label, const char *value, GColor vcol) {
   int fh = g_theme.big ? 12 : 10;
   if (L->stacked) {
-    draw_text(ctx, label, g_theme.small, GRect(c.origin.x, y - 3, c.size.w, g_theme.lh + 4), GTextAlignmentLeft, C_TEXT);
+    // Stops short of the value column, so an ellipsis never sits over a number.
+    draw_text(ctx, label, g_theme.small, GRect(c.origin.x, y - 3, c.size.w - L->vw - 4, g_theme.lh + 4), GTextAlignmentLeft, C_TEXT);
     int top = g_theme.big ? 19 : 14;
     int bh = L->rh - top - 3;
     if (bh < 4) bh = 4;

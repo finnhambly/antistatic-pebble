@@ -6,7 +6,9 @@
 static Window *s_window;
 static Layer *s_layer;
 static int s_market;
-static int s_li = -1;  // ladder index of the needle
+// Ladder index of the needle. Count markets get one step past the top
+// threshold, at the dial's end, where the readout reads "> top".
+static int s_li = -1;
 
 static const Summary *market(void) { return &g_markets[s_market]; }
 
@@ -80,11 +82,13 @@ static void update(Layer *layer, GContext *ctx) {
   const Point *lad;
   int nl = ladder(&lad);
   int32_t x = cursor_x();
+  bool past = count && s_li >= nl;
 
   // Readout.
   char digits[16], unit[20], prefix[8] = "";
   bool settled = false;
   if (count) {
+    if (past) snprintf(prefix, sizeof(prefix), ">");
     fmt_value(digits, sizeof(digits), x, m, false);
     // A long word unit ("hurricanes") would crowd out the digits; the title says it.
     const char *word = strlen(m->word) <= 5 ? m->word : "";
@@ -104,7 +108,7 @@ static void update(Layer *layer, GContext *ctx) {
     if (p && (p->flags & PF_RESOLVED)) settled = true;
   }
   int rh_read = g_theme.big ? 40 : 30;
-  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count, digits, count ? 0 : 4, unit, g_line, settled);
+  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count && !past, digits, count ? 0 : 4, unit, g_line, settled);
   y += rh_read + 6;
 
   // Rows and the dial share one x range so the needle runs straight down.
@@ -119,7 +123,7 @@ static void update(Layer *layer, GContext *ctx) {
 
   int32_t lo = count ? m->lo : lad[0].x;
   int32_t hi = count ? m->hi : lad[nl - 1].x;
-  int needle = count ? scale_pos(x, lo, hi, bx, bw) : 0;
+  int needle = past ? bx + bw : count ? scale_pos(x, lo, hi, bx, bw) : 0;
 
   for (int g = 0; g < ng && y + L.rh <= bottom + 2; g++) {
     const Point *p;
@@ -180,11 +184,11 @@ static void move(int d) {
   const Point *pts;
   int n = ladder(&pts);
   int next = s_li + d;
-  if (next < 0 || next >= n) return;
   bool count = market()->kind == KIND_COUNT;
+  if (next < 0 || next > (count ? n : n - 1)) return;
   const Point *before, *after;
-  point_at(0, pts[s_li].x, count, &before);
-  point_at(0, pts[next].x, count, &after);
+  point_at(0, pts[s_li < n ? s_li : n - 1].x, count, &before);
+  point_at(0, pts[next < n ? next : n - 1].x, count, &after);
   bump_detent(value_of(before), value_of(after));
   s_li = next;
   layer_mark_dirty(s_layer);
