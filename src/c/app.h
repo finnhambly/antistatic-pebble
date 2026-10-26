@@ -153,6 +153,7 @@ void draw_geq(GContext *ctx, GPoint at, int size, GColor color);
 void draw_text(GContext *ctx, const char *s, GFont font, GRect r, GTextAlignment align, GColor color);
 void draw_indicators(GContext *ctx, GRect r, int line);
 void draw_header(GContext *ctx, GRect c, const char *left, const char *right, bool busy);
+int draw_wrapped(GContext *ctx, const char *s, GFont font, GRect box, GTextAlignment align, GColor color);
 typedef struct { bool stacked; int lw, vw, rh, bx, bw; } RowLayout;
 void rows_layout(RowLayout *L, const Summary *m, int ng, GRect c, int top, int bottom);
 void row_value(char *buf, size_t n, int permille, uint8_t flags, GColor *col, GColor *bar);

@@ -91,9 +91,10 @@ static void update(Layer *layer, GContext *ctx) {
   if (s_index >= g_market_count) s_index = g_market_count - 1;
   const Summary *m = &g_markets[s_index];
 
+  // Fetching happens out of sight: the header only counts.
   char counter[16];
-  snprintf(counter, sizeof(counter), "%02d/%02d", s_index + 1, g_market_total);
-  draw_header(ctx, c, "antistatic", g_list_done ? counter : g_status, !g_list_done);
+  snprintf(counter, sizeof(counter), "%02d/%02d", s_index + 1, g_market_total > g_market_count ? g_market_total : g_market_count);
+  draw_header(ctx, c, "antistatic", counter, false);
 
   GTextAlignment align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
   int y = c.origin.y + g_theme.lh;
@@ -107,16 +108,18 @@ static void update(Layer *layer, GContext *ctx) {
   RowLayout L;
   rows_layout(&L, m, ng, c, 0, 1000);
 
-  // The title takes three lines when the rows can spare them.
+  // The title takes as many lines as the rows can spare, and drops to the
+  // smaller bold font if it still wouldn't fit whole.
   int line = g_theme.big ? 26 : 20;
   int sub_h = m->kind != KIND_COUNT && m->sub[0] ? g_theme.lh - 1 : 0;
   int rows_min = ng * (L.stacked ? 24 : 14);
-  int lines = bottom - y - sub_h - rows_min >= line * 3 + 2 ? 3 : 2;
-  GRect tbox = GRect(c.origin.x, y - 2, c.size.w, line * lines);
-  GSize tsz = graphics_text_layout_get_content_size(m->title, g_theme.title, tbox, GTextOverflowModeTrailingEllipsis, align);
-  graphics_context_set_text_color(ctx, C_TEXT);
-  graphics_draw_text(ctx, m->title, g_theme.title, tbox, GTextOverflowModeTrailingEllipsis, align, NULL);
-  y += tsz.h + 2;
+  int room = bottom - y - sub_h - rows_min - 2;
+  if (room < line * 2) room = line * 2;
+  if (room > line * 5) room = line * 5;
+  GFont tf = g_theme.title;
+  GSize whole = graphics_text_layout_get_content_size(m->title, tf, GRect(0, 0, c.size.w, 400), GTextOverflowModeWordWrap, align);
+  if (whole.h > room) tf = g_theme.small_bold;
+  y += draw_wrapped(ctx, m->title, tf, GRect(c.origin.x, y - 2, c.size.w, room), align, C_TEXT) + 2;
 
   if (sub_h) {
     draw_text(ctx, m->sub, g_theme.small, GRect(c.origin.x, y - 3, c.size.w, g_theme.lh + 4), align, C_DIM);

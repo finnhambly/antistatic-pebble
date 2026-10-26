@@ -369,15 +369,22 @@ function listMarkets(cb) {
   if (!picks) {
     return get('/markets?sort=time&limit=' + maxMarkets(), function (err, res) { cb(err, err ? [] : res.data || []); });
   }
-  var out = [], failed = 0;
+  var out = [], failed = 0, gone = 0;
   eachLimit(picks.slice(0, maxMarkets()), 3, function (pick, i, next) {
     get('/markets/' + encodeURIComponent(pick.code), function (err, res) {
-      if (err) failed++; else out[i] = res.data;
+      if (!err) out[i] = res.data;
+      else if (err.message === 'HTTP 404' || err.message === 'HTTP 403') gone++;
+      else failed++;
       next();
     });
   }, function () {
     var markets = out.filter(Boolean);
-    cb(picks.length && !markets.length && failed ? new Error('Network') : null, markets);
+    if (markets.length) return cb(null, markets);
+    if (failed) return cb(new Error('Network'), []);
+    // None of the picks is there any more (deleted, or not yours to see):
+    // the default order rather than nothing.
+    savePicks(null);
+    listMarkets(cb);
   });
 }
 

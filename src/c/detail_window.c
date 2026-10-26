@@ -38,12 +38,14 @@ static void update(Layer *layer, GContext *ctx) {
   if (s_idx >= n) s_idx = n - 1;
   const Point *p = &pts[s_idx];
 
-  // Header: which curve, and how many there are.
-  char pager[16];
-  snprintf(pager, sizeof(pager), "%d/%d", s_group + 1, g_detail.ngroups);
-  const char *name = m->groups[s_group].label[0] ? m->groups[s_group].label : m->title;
-  draw_header(ctx, c, name, g_detail.ngroups > 1 ? pager : NULL, false);
-  int y = c.origin.y + g_theme.lh;
+  // The market's whole title, up to three lines.
+  char pager[16] = "";
+  if (g_detail.ngroups > 1) snprintf(pager, sizeof(pager), "%d/%d", s_group + 1, g_detail.ngroups);
+  int tl = g_theme.big ? 20 : 16;
+  GTextAlignment talign = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
+  int y = c.origin.y + draw_wrapped(ctx, m->title, g_theme.small_bold,
+                                    GRect(c.origin.x + g_theme.edge, c.origin.y - 3, c.size.w - 2 * g_theme.edge, tl * 3 + 2),
+                                    talign, C_TEXT);
 
   // Readout: the probability at the selected bar.
   char digits[12];
@@ -54,10 +56,13 @@ static void update(Layer *layer, GContext *ctx) {
   y += rh + 2;
 
   // What the bar is, and the other line.
-  char label[28], second[24], ov[10];
+  char label[28], second[LABEL_LEN + 24], ov[10];
   bar_label(label, sizeof(label), p);
   fmt_prob(ov, sizeof(ov), other(p), true);
-  snprintf(second, sizeof(second), "%s %s", line_name(other_line(g_line)), ov);
+  // The curve's name leads this line when there's more than one.
+  const char *curve = m->groups[s_group].label;
+  if (curve[0] && g_detail.ngroups > 1) snprintf(second, sizeof(second), "%s · %s %s", curve, line_name(other_line(g_line)), ov);
+  else snprintf(second, sizeof(second), "%s %s", line_name(other_line(g_line)), ov);
   int lh = g_theme.big ? 22 : 18;
   if (count) {
     draw_geq(ctx, GPoint(c.origin.x + 1, y + 4), 6, C_TEXT);
@@ -65,6 +70,8 @@ static void update(Layer *layer, GContext *ctx) {
   } else {
     draw_text(ctx, label, g_theme.small_bold, GRect(c.origin.x, y - 2, c.size.w, lh), GTextAlignmentLeft, C_TEXT);
   }
+  // Which curve of how many, beside the bar it's on.
+  if (pager[0]) draw_text(ctx, pager, g_theme.small, GRect(c.origin.x, y - 1, c.size.w - g_theme.edge, lh), GTextAlignmentRight, C_DIM);
   y += lh - 2;
   draw_text(ctx, second, g_theme.small, GRect(c.origin.x, y - 3, c.size.w, g_theme.lh + 4), GTextAlignmentLeft, C_DIM);
   y += g_theme.lh;

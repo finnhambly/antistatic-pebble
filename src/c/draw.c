@@ -164,6 +164,12 @@ void draw_indicators(GContext *ctx, GRect r, int line) {
 }
 
 // "antistatic." with the red full stop, a counter or status on the right.
+// Text wrapped within box; returns the height it took.
+int draw_wrapped(GContext *ctx, const char *s, GFont font, GRect box, GTextAlignment align, GColor color) {
+  draw_text(ctx, s, font, box, align, color);
+  return graphics_text_layout_get_content_size(s, font, box, GTextOverflowModeTrailingEllipsis, align).h;
+}
+
 void draw_header(GContext *ctx, GRect c, const char *left, const char *right, bool busy) {
   GFont f = g_theme.small;
   GRect row = GRect(c.origin.x, c.origin.y - 3, c.size.w, g_theme.lh + 4);

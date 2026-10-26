@@ -51,7 +51,7 @@ static void draw_tuning(GContext *ctx, GRect c, int y) {
   // so the readout waits, unlit.
   int h = g_theme.big ? 40 : 30;
   draw_readout(ctx, GRect(c.origin.x, y, c.size.w, h), NULL, false, "", 4, NULL, g_line, false);
-  draw_text(ctx, "Tuning", g_theme.small_bold, GRect(c.origin.x, y + h + 10, c.size.w, 20), GTextAlignmentCenter, C_DIM);
+  draw_text(ctx, "Loading", g_theme.small_bold, GRect(c.origin.x, y + h + 10, c.size.w, 20), GTextAlignmentCenter, C_DIM);
 }
 
 static void update(Layer *layer, GContext *ctx) {
@@ -63,10 +63,16 @@ static void update(Layer *layer, GContext *ctx) {
   bool count = m->kind == KIND_COUNT;
   GTextAlignment align = PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft);
 
+  // The whole title, in what the readout, rows and dial leave (one line at
+  // least).
   int y = c.origin.y;
-  int th = g_theme.big ? 22 : 18;
-  draw_text(ctx, m->title, g_theme.small_bold, GRect(c.origin.x + g_theme.edge, y - 3, c.size.w - 2 * g_theme.edge, th), align, C_TEXT);
-  y += th;
+  int tl = g_theme.big ? 20 : 16;
+  int ng0 = m->ngroups > 0 ? m->ngroups : 1;
+  int room = c.size.h - (g_theme.big ? 46 : 36) - ng0 * (g_theme.big ? 22 : 17) - (g_theme.lh + 6);
+  if (room < tl + 2) room = tl + 2;
+  if (room > tl * 4 + 2) room = tl * 4 + 2;
+  y += draw_wrapped(ctx, m->title, g_theme.small_bold,
+                    GRect(c.origin.x + g_theme.edge, y - 3, c.size.w - 2 * g_theme.edge, room), align, C_TEXT) + 1;
 
   if (!detail_loaded()) { draw_tuning(ctx, c, y + 2); return; }
   if (s_li < 0) init_cursor();

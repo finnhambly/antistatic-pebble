@@ -4,7 +4,7 @@ Summary g_markets[MAX_MARKETS];
 int g_market_count = 0;
 int g_market_total = 0;
 bool g_list_done = false;
-char g_status[48] = "Tuning";
+char g_status[48] = "Loading";
 Detail g_detail;
 int g_line = LINE_CROWD;
 Auth g_auth;
@@ -156,7 +156,7 @@ static void inbox(DictionaryIterator *it, void *ctx) {
       account_window_refresh();
       if (before == AUTH_CODE && g_auth.state == AUTH_IN) {
         // Signed in: the list is fetched again as you.
-        snprintf(g_status, sizeof(g_status), "Tuning");
+        snprintf(g_status, sizeof(g_status), "Loading");
         g_list_done = false;
         list_window_refresh();
       }
@@ -206,7 +206,7 @@ void comm_request_detail(const char *code) {
 }
 
 void comm_refresh(void) {
-  snprintf(g_status, sizeof(g_status), "Tuning");
+  snprintf(g_status, sizeof(g_status), "Loading");
   g_list_done = false;
   g_detail.ready = false;
   g_detail.code[0] = 0;
@@ -248,7 +248,7 @@ static void restore_markets(void) {
     }
   }
   g_market_count = g_market_total = n;
-  snprintf(g_status, sizeof(g_status), "Tuning");
+  snprintf(g_status, sizeof(g_status), "Loading");
 }
 
 static void on_tap(AccelAxisType axis, int32_t direction) {
