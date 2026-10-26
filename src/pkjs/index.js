@@ -190,6 +190,22 @@ function byLabel(day, cadence) {
   return 'By ' + d.getUTCDate() + ' ' + MONTHS[m] + ' ' + y;
 }
 
+// A curve named by its period's end date ("2026-12-31") reads as its year
+// when there is one curve a year, else as the date.
+function curveLabel(key, keys) {
+  if (key === 'main') return '';
+  var dated = /^(\d{4})-(\d{2})-(\d{2})/;
+  var d = String(key).match(dated);
+  if (!d) return key;
+  var years = {}, yearly = true;
+  keys.forEach(function (k) {
+    var m = String(k).match(dated);
+    if (!m || years[m[1]]) yearly = false;
+    else years[m[1]] = true;
+  });
+  return yearly ? d[1] : Number(d[3]) + ' ' + MONTHS[Number(d[2]) - 1] + ' ' + d[1];
+}
+
 function buildModel(market, forecast, subs) {
   var kind = forecast.multidate ? 2 : (market.type === 'count' ? 0 : 1);
   var count = kind === 0;
@@ -198,15 +214,19 @@ function buildModel(market, forecast, subs) {
 
   // Curves in the order the API lists them.
   var order = (forecast.curves || []).map(function (c) { return c.curve; });
+  var settled = {};
+  (forecast.curves || []).forEach(function (c) { settled[c.curve] = c.resolved_value; });
   var groups = {};
   var hasMine = false;
+  // Thresholds the site writes scaled ($m shown as $bn).
+  var scale = forecast.display_scale || 1;
   (forecast.submarkets || []).forEach(function (s) {
     var key = s.curve || s.projection_group || 'main';
     if (!groups[key]) {
       groups[key] = { label: s.group_label || null, points: [] };
       if (order.indexOf(key) < 0) order.push(key);
     }
-    var x = count ? Math.round(Number(s.threshold) * 100) : dates[s.id];
+    var x = count ? Math.round(Number(s.threshold) * scale * 100) : dates[s.id];
     if (x === undefined || x === null || isNaN(x)) return;
     var flags = 0;
     if (s.status === 'resolved') flags |= 1;
@@ -228,7 +248,15 @@ function buildModel(market, forecast, subs) {
     .map(function (k) {
       var g = groups[k];
       g.points.sort(function (a, b) { return a.x - b.x; });
-      var label = eventLabels[k] || g.label || (k === 'main' ? '' : k);
+      // A settled year whose bars stop at its outcome (a single "at least
+      // this" bar) gets a no just above it, so stepping past reads No.
+      var top = g.points[g.points.length - 1];
+      var v = count && settled[k];
+      if (typeof v === 'number' && top && top.flags & 1) {
+        var vx = Math.round(v * scale * 100);
+        if (top.x <= vx) g.points.push({ x: vx + 1, crowd: 0, house: 0, mine: NONE, flags: 1 });
+      }
+      var label = eventLabels[k] || g.label || curveLabel(k, order);
       return { label: String(label).slice(0, 47), points: g.points };
     });
 

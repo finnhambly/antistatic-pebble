@@ -6,9 +6,11 @@
 static Window *s_window;
 static Layer *s_layer;
 static int s_market;
-// Ladder index of the needle. Count markets get one step past the top
-// threshold, at the dial's end, where the readout reads "> top".
-static int s_li = -1;
+// The needle's value: a threshold or date of one of the curves. Up and
+// Down step through every curve's, so later years' higher thresholds are
+// reachable from the first year's.
+static int32_t s_x;
+static bool s_set;
 
 static const Summary *market(void) { return &g_markets[s_market]; }
 
@@ -18,10 +20,32 @@ static bool detail_loaded(void) {
 
 static int ladder(const Point **pts) { return group_points(ladder_group(), pts); }
 
+static int shown_groups(void) {
+  int ng = market()->ngroups < g_detail.ngroups ? market()->ngroups : g_detail.ngroups;
+  return ng < 1 ? 1 : ng;
+}
+
+// The nearest threshold or date past x in direction d, over every shown
+// curve; false at the end.
+static bool step_from(int32_t x, int d, int32_t *out) {
+  bool found = false;
+  for (int g = 0; g < shown_groups(); g++) {
+    const Point *pts;
+    int n = group_points(g, &pts);
+    for (int i = 0; i < n; i++) {
+      int32_t v = pts[i].x;
+      if (d > 0 ? v <= x : v >= x) continue;
+      if (!found || (d > 0 ? v < *out : v > *out)) *out = v;
+      found = true;
+    }
+  }
+  return found;
+}
+
 static void init_cursor(void) {
   const Point *pts;
   int n = ladder(&pts);
-  if (n == 0) { s_li = -1; return; }
+  if (n == 0) return;
   const Summary *m = market();
   int32_t target = m->kind == KIND_COUNT ? m->groups[0].q[2] : m->lo;
   int best = 0;
@@ -30,14 +54,26 @@ static void init_cursor(void) {
     int32_t d = pts[i].x > target ? pts[i].x - target : target - pts[i].x;
     if (d < bd) { bd = d; best = i; }
   }
-  s_li = best;
+  s_x = pts[best].x;
+  s_set = true;
 }
 
-static int32_t cursor_x(void) {
-  const Point *pts;
-  int n = ladder(&pts);
-  if (n == 0 || s_li < 0) return 0;
-  return pts[s_li < n ? s_li : n - 1].x;
+static int32_t cursor_x(void) { return s_x; }
+
+// A curve's bar at x. Past the end of a curve's own bars it reads off its
+// last (or, for thresholds, first) bar, and *bound says the true value is
+// below ('<') or above ('>') it: P(>= x) is under P(>= top threshold), and
+// P(by x) is over P(by the last date) for a separate event. A date
+// market's yearly curves end with their year, so theirs stand as they are.
+static const Point *row_point(int g, int32_t x, bool count, char *bound) {
+  const Point *pts, *p;
+  int n = group_points(g, &pts);
+  *bound = 0;
+  point_at(g, x, count, &p);
+  if (n == 0 || !p) return p;
+  if (x > pts[n - 1].x) *bound = count ? '<' : market()->kind == KIND_MULTIDATE ? '>' : 0;
+  else if (count && x < pts[0].x) *bound = '>';
+  return p;
 }
 
 static int value_of(const Point *p) { return line_value(p, g_line); }
@@ -77,18 +113,16 @@ static void update(Layer *layer, GContext *ctx) {
                     GRect(c.origin.x + g_theme.edge, y - 3, c.size.w - 2 * g_theme.edge, room), align, C_TEXT) + 1;
 
   if (!detail_loaded()) { draw_tuning(ctx, c, y + 2); return; }
-  if (s_li < 0) init_cursor();
+  if (!s_set) init_cursor();
 
   const Point *lad;
   int nl = ladder(&lad);
   int32_t x = cursor_x();
-  bool past = count && s_li >= nl;
 
   // Readout.
   char digits[16], unit[20], prefix[8] = "";
   bool settled = false;
   if (count) {
-    if (past) snprintf(prefix, sizeof(prefix), ">");
     fmt_value(digits, sizeof(digits), x, m, false);
     // A long word unit ("hurricanes") would crowd out the digits; the title says it.
     const char *word = strlen(m->word) <= 5 ? m->word : "";
@@ -108,7 +142,7 @@ static void update(Layer *layer, GContext *ctx) {
     if (p && (p->flags & PF_RESOLVED)) settled = true;
   }
   int rh_read = g_theme.big ? 40 : 30;
-  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count && !past, digits, count ? 0 : 4, unit, g_line, settled);
+  draw_readout(ctx, GRect(c.origin.x, y, c.size.w, rh_read), prefix, count, digits, count ? 0 : 4, unit, g_line, settled);
   y += rh_read + 6;
 
   // Rows and the dial share one x range so the needle runs straight down.
@@ -121,18 +155,38 @@ static void update(Layer *layer, GContext *ctx) {
   int bx = L.bx, bw = L.bw;
   int rows_top = y;
 
-  int32_t lo = count ? m->lo : lad[0].x;
-  int32_t hi = count ? m->hi : lad[nl - 1].x;
-  int needle = past ? bx + bw : count ? scale_pos(x, lo, hi, bx, bw) : 0;
+  // Dates span every shown curve's bars, from the first to the last.
+  int32_t lo = m->lo, hi = m->hi;
+  if (!count) {
+    lo = lad[0].x;
+    hi = lad[nl - 1].x;
+    for (int g = 0; g < shown_groups(); g++) {
+      const Point *pts;
+      int n = group_points(g, &pts);
+      if (n && pts[0].x < lo) lo = pts[0].x;
+      if (n && pts[n - 1].x > hi) hi = pts[n - 1].x;
+    }
+  }
+  int needle = count ? scale_pos(x, lo, hi, bx, bw) : 0;
 
   for (int g = 0; g < ng && y + L.rh <= bottom + 2; g++) {
-    const Point *p;
-    point_at(g, x, count, &p);
+    char bound;
+    const Point *p = row_point(g, x, count, &bound);
     int v = value_of(p);
     uint8_t flags = p ? p->flags : 0;
     GColor vcol, bcol;
     char value[12];
     row_value(value, sizeof(value), v, flags, &vcol, &bcol);
+    if (bound && (flags & PF_RESOLVED)) {
+      // Settled past its own bars only where the outcome carries over: no
+      // above a threshold that resolved no, yes after a date that resolved yes.
+      bool yes = flags & PF_YES;
+      if (yes != (bound == '>')) snprintf(value, sizeof(value), "-");
+    } else if (bound && v >= 0) {
+      char num[10];
+      fmt_prob(num, sizeof(num), v, true);
+      snprintf(value, sizeof(value), "%c%s", bound, num);
+    }
     GRect bar = row_draw(ctx, &L, c, y, m->groups[g].label, value, vcol);
     bool yes = (flags & PF_RESOLVED) && (flags & PF_YES);
     if (count) draw_count_band(ctx, bar, m, &m->groups[g]);
@@ -145,33 +199,45 @@ static void update(Layer *layer, GContext *ctx) {
   if (!count) {
     bx = c.origin.x;
     bw = c.size.w;
-    needle = scale_pos(s_li, 0, nl - 1, bx, bw);
+    needle = scale_pos(x, lo, hi, bx, bw);
   }
   int ly = c.origin.y + c.size.h - scale_h + 5;
   graphics_context_set_stroke_color(ctx, C_DIM);
   graphics_context_set_stroke_width(ctx, 1);
   graphics_draw_line(ctx, GPoint(bx, ly), GPoint(bx + bw, ly));
   int last_tick = -10;
-  for (int i = 0; i < nl; i++) {
-    int tx = count ? scale_pos(lad[i].x, lo, hi, bx, bw) : scale_pos(i, 0, nl - 1, bx, bw);
-    bool major = count ? false : (m->cadence == CAD_YEAR || date_month(lad[i].x) == 1);
+  // A tick per step: the ladder's thresholds, or every curve's dates.
+  int32_t tv = count ? lad[0].x : lo;
+  for (int i = 0; count ? i < nl : true; i++) {
+    if (count) tv = lad[i].x;
+    else if (i > 0 && !step_from(tv, 1, &tv)) break;
+    int tx = scale_pos(tv, lo, hi, bx, bw);
+    bool major = count ? false : (m->cadence == CAD_YEAR || date_month(tv) == 1);
     if (!major && tx - last_tick < 3) continue;
     graphics_context_set_stroke_color(ctx, major ? C_TEXT : C_DIM);
     graphics_draw_line(ctx, GPoint(tx, ly - (major ? 4 : 2)), GPoint(tx, ly));
     last_tick = tx;
   }
-  int edge_l = c.origin.x + g_theme.edge - bx;
-  if (edge_l < 0) edge_l = 0;
   char left[20], right[20];
   if (count) {
     fmt_value(left, sizeof(left), lo, m, true);
     fmt_value(right, sizeof(right), hi, m, true);
   } else {
-    snprintf(left, sizeof(left), "%d", date_year(lad[0].x));
-    snprintf(right, sizeof(right), "%d", date_year(lad[nl - 1].x));
+    snprintf(left, sizeof(left), "%d", date_year(lo));
+    snprintf(right, sizeof(right), "%d", date_year(hi));
   }
-  draw_text(ctx, left, g_theme.small, GRect(bx - 2 + edge_l, ly, bw / 2 - edge_l, g_theme.lh + 2), GTextAlignmentLeft, C_DIM);
-  draw_text(ctx, right, g_theme.small, GRect(bx + bw / 2, ly, bw / 2 + 2 - edge_l, g_theme.lh + 2), GTextAlignmentRight, C_DIM);
+  // Each end's label sits centred under its end, kept on screen, so a
+  // dial narrowed by the row labels still has room for both.
+  int x0 = c.origin.x + g_theme.edge, x1 = c.origin.x + c.size.w - g_theme.edge;
+  GRect tr = GRect(0, 0, c.size.w, g_theme.lh + 2);
+  int lw = graphics_text_layout_get_content_size(left, g_theme.small, tr, GTextOverflowModeFill, GTextAlignmentLeft).w;
+  int rw = graphics_text_layout_get_content_size(right, g_theme.small, tr, GTextOverflowModeFill, GTextAlignmentLeft).w;
+  int lx = bx - lw / 2, rx = bx + bw - rw / 2;
+  if (lx < x0) lx = x0;
+  if (rx + rw > x1) rx = x1 - rw;
+  if (rx < lx + lw + 4) rx = lx + lw + 4;
+  draw_text(ctx, left, g_theme.small, GRect(lx, ly, lw + 2, g_theme.lh + 2), GTextAlignmentLeft, C_DIM);
+  draw_text(ctx, right, g_theme.small, GRect(rx, ly, rw + 2, g_theme.lh + 2), GTextAlignmentLeft, C_DIM);
 
   // The needle: through the rows for thresholds, on the dial for dates.
   graphics_context_set_fill_color(ctx, C_RED);
@@ -181,16 +247,14 @@ static void update(Layer *layer, GContext *ctx) {
 
 static void move(int d) {
   if (!detail_loaded()) return;
-  const Point *pts;
-  int n = ladder(&pts);
-  int next = s_li + d;
+  int32_t next;
+  if (!step_from(s_x, d, &next)) return;
   bool count = market()->kind == KIND_COUNT;
-  if (next < 0 || next > (count ? n : n - 1)) return;
   const Point *before, *after;
-  point_at(0, pts[s_li < n ? s_li : n - 1].x, count, &before);
-  point_at(0, pts[next < n ? next : n - 1].x, count, &after);
+  point_at(0, s_x, count, &before);
+  point_at(0, next, count, &after);
   bump_detent(value_of(before), value_of(after));
-  s_li = next;
+  s_x = next;
   layer_mark_dirty(s_layer);
 }
 
@@ -227,7 +291,7 @@ static void unload(Window *w) {
 
 void market_window_push(int index) {
   s_market = index;
-  s_li = -1;
+  s_set = false;
   if (g_line == LINE_YOU && !(g_markets[index].flags & MF_MINE)) g_line = LINE_CROWD;
   s_window = window_create();
   window_set_background_color(s_window, C_BG);
