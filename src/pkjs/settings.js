@@ -7,7 +7,7 @@ function page(state) {
   return '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>Antistatic</title><style>' + CSS + '</style></head><body>' +
-    '<header>antistatic<b>.</b></header><main id="app"></main>' +
+    '<header>antistatic</header><main id="app"></main>' +
     '<script>var STATE=' + data + ';' + APP + '</script></body></html>';
 }
 
@@ -15,13 +15,12 @@ var CSS = [
   '*{box-sizing:border-box;border-radius:0}',
   'body{margin:0;background:#000;color:#fff;font:16px/1.35 -apple-system,system-ui,sans-serif}',
   'header{padding:16px;font:600 22px/1 ui-monospace,Menlo,monospace;letter-spacing:.02em}',
-  'header b{color:#ff3b5c}',
-  'main{padding:0 16px 96px}',
+    'main{padding:0 16px 96px}',
   'h2{font-size:13px;font-weight:600;color:#68a6cb;margin:24px 0 8px}',
   '.row{display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 0;border-bottom:1px solid #1d2a36}',
   '.row .t{flex:1;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:15px}',
   '.n{width:22px;color:#68a6cb;font:13px ui-monospace,Menlo,monospace}',
-  '.tag{font-size:11px;color:#ff3b5c;border:1px solid #ff3b5c;padding:0 4px}',
+  '.tag{font-size:11px;color:#68a6cb;border:1px solid #68a6cb;padding:0 4px}',
   'button{flex:none;font:inherit;color:#fff;background:#000;border:1px solid #3b5b75;min-width:40px;height:36px;padding:0 10px}',
   'button:disabled{opacity:.3}',
   'a.btn{flex:none;display:inline-flex;align-items:center;color:#000;background:#68a6cb;height:36px;padding:0 10px;text-decoration:none}',

@@ -186,7 +186,7 @@ void draw_header(GContext *ctx, GRect c, const char *left, const char *right, bo
     rw = rs.w + 6;
   }
   draw_text(ctx, left, f, GRect(row.origin.x, row.origin.y, row.size.w - rw, row.size.h), GTextAlignmentLeft, C_DIM);
-  if (right) draw_text(ctx, right, f, row, GTextAlignmentRight, busy ? C_RED : C_DIM);
+  if (right) draw_text(ctx, right, f, row, GTextAlignmentRight, busy ? C_BAR : C_DIM);
 #endif
 }
 
@@ -288,8 +288,8 @@ void draw_readout(GContext *ctx, GRect r, const char *prefix, bool geq, const ch
   int sw = segments_width(h, digits, cells);
   int base = r.origin.y + r.size.h;
   GRect box = GRect(r.origin.x + pw, base - h, sw, h);
-  // Settled bars read in red.
-  draw_segments_color(ctx, box, digits, cells, false, settled ? C_RED : C_LIT);
+  // Settled bars read in the accent blue.
+  draw_segments_color(ctx, box, digits, cells, false, settled ? C_BAR : C_LIT);
 
   if (geq) draw_geq(ctx, GPoint(r.origin.x + 2, base - 13), 7, C_DIM);
   else if (pw) draw_text(ctx, prefix, g_theme.small, GRect(r.origin.x, base - g_theme.lh - 1, pw + 4, g_theme.lh + 4), GTextAlignmentLeft, C_DIM);
@@ -362,8 +362,8 @@ void row_value(char *buf, size_t n, int permille, uint8_t flags, GColor *col, GC
   if (flags & PF_RESOLVED) {
     bool yes = flags & PF_YES;
     snprintf(buf, n, yes ? "Yes" : "No");
-    *col = yes ? C_RED : C_DIM;
-    *bar = yes ? C_RED : PBL_IF_COLOR_ELSE(GColorDarkGray, GColorWhite);
+    *col = yes ? C_TEXT : C_DIM;
+    *bar = yes ? C_LIT : PBL_IF_COLOR_ELSE(GColorDarkGray, GColorWhite);
   } else if (permille < 0) {
     snprintf(buf, n, "-");
   } else {

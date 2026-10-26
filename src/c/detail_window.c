@@ -103,8 +103,8 @@ static void update(Layer *layer, GContext *ctx) {
 #if defined(PBL_COLOR)
     graphics_context_set_fill_color(ctx, C_GHOST);
     graphics_fill_rect(ctx, GRect(bx, ch.origin.y, bw, ch.size.h - h), 0, GCornerNone);
-    GColor col = sel ? C_LIT : (qres ? ((q->flags & PF_YES) ? C_RED : GColorDarkGray) : C_BAND_OUT);
-    if (sel && qres && (q->flags & PF_YES)) col = C_RED;
+    GColor col = sel ? C_LIT : (qres ? ((q->flags & PF_YES) ? C_BAR : GColorDarkGray) : C_BAND_OUT);
+    if (sel && qres && (q->flags & PF_YES)) col = C_BAR;
     graphics_context_set_fill_color(ctx, col);
     graphics_fill_rect(ctx, GRect(bx, base - h, bw, h), 0, GCornerNone);
 #else
@@ -115,13 +115,13 @@ static void update(Layer *layer, GContext *ctx) {
 #endif
     // The other line, as a tick across the bar.
     int oh = ch.size.h * other(q) / 1000;
-    graphics_context_set_fill_color(ctx, sel ? C_RED : C_TEXT);
+    graphics_context_set_fill_color(ctx, sel ? C_BAND_OUT : C_TEXT);
     graphics_fill_rect(ctx, GRect(bx - (pitch >= 5 ? 1 : 0), base - oh - 1, bw + (pitch >= 5 ? 2 : 0), 1), 0, GCornerNone);
   }
 
   // Marker under the selected bar, and the ends of the window.
   int sx = x0 + (s_idx - first) * pitch;
-  graphics_context_set_fill_color(ctx, C_RED);
+  graphics_context_set_fill_color(ctx, C_TEXT);
   graphics_fill_rect(ctx, GRect(sx, base + 2, bw, 3), 0, GCornerNone);
   char l[20], r[20];
   if (count) {

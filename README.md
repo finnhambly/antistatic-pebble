@@ -1,7 +1,7 @@
 # Antistatic for Pebble
 
 The antistatic.exchange homepage charts on your wrist, drawn like a hi-fi
-tuner: segment digits, a red needle, and a status column showing which line
+tuner: segment digits, a white needle, and a status column showing which line
 you're reading.
 
 ![Pebble 2 Duo](docs/flint.png)
@@ -33,11 +33,11 @@ Back steps out. A shake (wrist flick) refreshes from anywhere.
   probability, with the curve's name under it.
 - **Status column**: Crowd, House or You lit for the line shown. You appears
   once you're signed in, on markets you've forecast on (bars you haven't
-  touched read the house's). The digits turn red on a settled bar, and
+  touched read the house's). The digits turn blue on a settled bar, and
   settled curves read Yes or No in the rows.
 - A short buzz when the needle takes the first row across 50%.
 - The launcher glance shows the first market's headline number.
-- Private markets say so in red at the foot of their card.
+- Private markets say so in blue at the foot of their card.
 
 ## Signing in
 

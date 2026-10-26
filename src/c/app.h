@@ -127,12 +127,11 @@ void account_window_refresh(void);
 // Drawing and formatting (draw.c).
 #define C_BG GColorBlack
 #define C_TEXT GColorWhite
-#define C_LIT PBL_IF_COLOR_ELSE(GColorCeleste, GColorWhite)
-#define C_DIM PBL_IF_COLOR_ELSE(GColorCadetBlue, GColorWhite)
-#define C_GHOST PBL_IF_COLOR_ELSE(GColorOxfordBlue, GColorBlack)
+#define C_LIT GColorWhite
+#define C_DIM PBL_IF_COLOR_ELSE(GColorLightGray, GColorWhite)
+#define C_GHOST PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
 #define C_BAR PBL_IF_COLOR_ELSE(GColorPictonBlue, GColorWhite)
 #define C_BAND_OUT PBL_IF_COLOR_ELSE(GColorCobaltBlue, GColorWhite)
-#define C_RED PBL_IF_COLOR_ELSE(GColorFolly, GColorWhite)
 
 typedef struct {
   GFont small, small_bold, title;

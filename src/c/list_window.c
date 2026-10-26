@@ -145,7 +145,7 @@ static void update(Layer *layer, GContext *ctx) {
   // whether the market is private.
   GRect foot = GRect(c.origin.x, bottom - 1, c.size.w, 18);
   if (priv) {
-    draw_text(ctx, "Private", g_theme.small_bold, foot, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight), C_RED);
+    draw_text(ctx, "Private", g_theme.small_bold, foot, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentRight), C_BAR);
 #if defined(PBL_ROUND)
     foot.origin.y -= g_theme.lh;
 #endif
@@ -162,7 +162,7 @@ static void update(Layer *layer, GContext *ctx) {
     draw_text(ctx, text, g_theme.small, foot, align, C_DIM);
   }
   if (resolved) {
-    draw_text(ctx, "Resolved", g_theme.small_bold, foot, align, C_RED);
+    draw_text(ctx, "Resolved", g_theme.small_bold, foot, align, C_BAR);
   }
 }
 

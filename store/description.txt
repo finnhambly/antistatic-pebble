@@ -1,0 +1,9 @@
+Forecasts from antistatic.exchange on your wrist. Each market's chart is drawn like a hi-fi tuner: Up and Down move a red needle along its dates or thresholds, and every row reads off the probability at the needle.
+
+Select opens the point chart for a curve, bar by bar. Hold Select to switch between the crowd's forecast, the house's and your own.
+
+By default the watch shows the most time-sensitive markets. In the app's settings on your phone you can choose your own list, public and private markets, in your order.
+
+Signing in is optional; it adds your private markets and your forecasts. Hold Select on the market list and the watch shows a code to enter at antistatic.exchange/link.
+
+Works on every Pebble. Needs an internet connection through your phone.

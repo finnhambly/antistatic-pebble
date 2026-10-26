@@ -240,7 +240,7 @@ static void update(Layer *layer, GContext *ctx) {
   draw_text(ctx, right, g_theme.small, GRect(rx, ly, rw + 2, g_theme.lh + 2), GTextAlignmentLeft, C_DIM);
 
   // The needle: through the rows for thresholds, on the dial for dates.
-  graphics_context_set_fill_color(ctx, C_RED);
+  graphics_context_set_fill_color(ctx, C_TEXT);
   int top = count ? rows_top - 2 : ly - 7;
   graphics_fill_rect(ctx, GRect(needle - 1, top, 2, ly + 4 - top), 0, GCornerNone);
 }

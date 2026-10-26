@@ -77,7 +77,7 @@ static void update(Layer *layer, GContext *ctx) {
                          : g_auth.state == AUTH_DENIED ? "Declined"
                          : g_auth.state == AUTH_ERROR  ? "No signal"
                                                        : "Not signed in";
-      lines(ctx, c, y, what, NULL, g_auth.state == AUTH_OUT ? C_TEXT : C_RED);
+      lines(ctx, c, y, what, NULL, g_auth.state == AUTH_OUT ? C_TEXT : C_BAR);
       draw_text(ctx, g_auth.state == AUTH_OUT ? "Select to sign in" : "Select to try again", g_theme.small,
                 GRect(c.origin.x, foot - 3, c.size.w, g_theme.lh + 4), align, C_DIM);
     }
