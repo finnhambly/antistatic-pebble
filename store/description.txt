@@ -1,4 +1,4 @@
-Forecasts from antistatic.exchange on your wrist. Each market's chart is drawn like a hi-fi tuner: Up and Down move a red needle along its dates or thresholds, and every row reads off the probability at the needle.
+Forecasts from antistatic.exchange on your wrist. Each market's chart is drawn like a hi-fi tuner: Up and Down move a needle along its dates or thresholds, and every row reads off the probability at the needle.
 
 Select opens the point chart for a curve, bar by bar. Hold Select to switch between the crowd's forecast, the house's and your own.
 
